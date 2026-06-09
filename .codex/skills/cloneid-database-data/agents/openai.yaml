@@ -1,0 +1,6 @@
+interface:
+  display_name: "cloneID Database Data"
+  short_description: "Query cloneID lineage and metadata graphs"
+  default_prompt: "Use $cloneid-database-data to query cloneID culture episodes, lineages, media transitions, or assay anchors."
+policy:
+  allow_implicit_invocation: true
