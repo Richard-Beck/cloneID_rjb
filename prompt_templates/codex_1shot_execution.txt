@@ -1,0 +1,1 @@
+Execute the supplied plan bundle completely. Follow the repository instructions and applicable local skills. Keep the plan bundle unchanged, write all execution artifacts to the supplied output directory, and continue until the objective is achieved or genuinely blocked.

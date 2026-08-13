@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "phase_id": {
+      "type": "string"
+    },
+    "iteration": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "action": {
+      "type": "string",
+      "enum": ["COMPLETE", "WAIT_FOR_SLURM"]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "slurm_jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:_[0-9]+)?$"
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          },
+          "log_paths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "expected_outputs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": ["job_id", "purpose", "log_paths", "expected_outputs"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["phase_id", "iteration", "action", "summary", "slurm_jobs"],
+  "additionalProperties": false
+}

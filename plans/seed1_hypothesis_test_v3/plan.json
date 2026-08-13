@@ -1,0 +1,167 @@
+{
+  "schema_version": 2,
+  "plan_id": "seed1_hypothesis_test_v3",
+  "authoritative_plan": "plan.json",
+  "hypothesis_source": "ref/hypothesis-seed1.txt",
+  "objective": "Identify lineage spans that show credible adaptation after a change in selective context, then test whether density response or spatial information explains those changes better than strong population-level baselines.",
+  "research_logic": [
+    "Establish measurement validity before calculating growth phenotypes or excluding records.",
+    "Treat adaptation as heterogeneous and context-dependent; a population-average lineage-depth effect is not the primary question.",
+    "Apply only minimal structural and measurement filters before screening broadly for positive within-span growth-rate trends.",
+    "Use environmental and culture context to interpret and prioritize screen-positive spans rather than to narrow the initial screen.",
+    "Treat screen hits as exploratory candidates, then separate discovery from validation wherever the lineage structure permits.",
+    "Interpret candidate spans biologically, not only statistically, and localize unsupported findings rather than generalizing them to all spans."
+  ],
+  "phases": [
+    {
+      "id": "phase_1_data_validity",
+      "order": 1,
+      "name": "Lock inputs and establish phenotype validity",
+      "objective": "Freeze the run inputs and identify record-level problems that would invalidate episode measurements or day-level growth-rate estimates.",
+      "research_questions": [
+        "Which records contain clear timestamp inconsistencies that prevent day-level elapsed-time interpretation?",
+        "Which count, corrected-count, area, and image-derived measurements have interpretable units, plausible values, and adequate observation structure?",
+        "Which episode-level growth-rate definitions are supported by the available observations?",
+        "Which problems require exclusion, outcome-specific ineligibility, or sensitivity analysis rather than record deletion?"
+      ],
+      "output_contract": {
+        "input_hashes.tsv": "Run-specific hashes recorded before outcome analysis.",
+        "episode_measurement_qc.csv": "One row per episode, retaining every episode and giving outcome-specific eligibility flags and explicit reason codes.",
+        "phenotype_validity_contract.md": "Reasoned definitions of usable outcomes, exclusions, sensitivity sets, and unresolved limitations.",
+        "qc_summary.csv": "Counts of eligible, ineligible, and sensitivity-only observations for every proposed phenotype.",
+        "figures": "PNG diagnostics that make timing and measurement pathologies visible."
+      },
+      "review_focus": [
+        "Timing exclusions are tied to clear record-level inconsistencies rather than broad uncertainty about the timestamp source.",
+        "Eligibility decisions are justified from source semantics, distributions, and inspected examples rather than convenient thresholds.",
+        "Each downstream phenotype has a clear numerator, denominator, unit, validity rule, and sensitivity treatment.",
+        "Phase 2 receives a usable growth-rate definition with explicit exception and sensitivity codes."
+      ]
+    },
+    {
+      "id": "phase_2_growth_rate_screen",
+      "order": 2,
+      "name": "Screen spans for positive growth-rate trends",
+      "objective": "Apply a permissive screen for positive within-span growth-rate trends among coherent spans that meet minimal structural and measurement criteria.",
+      "research_questions": [
+        "What minimum episode count and valid growth-rate coverage are needed to estimate a within-span trend without making the screen unnecessarily restrictive?",
+        "Which screen-eligible spans show a positive trend in a Phase 1-valid growth-rate phenotype across successive culture episodes?",
+        "How uncertain and sensitive are those trend estimates to branching, questionable episodes, and influential observations?",
+        "Which spans fail the minimal screen criteria, and why?"
+      ],
+      "output_contract": {
+        "span_growth_rate_screen.csv": {
+          "grain": "One row per coherent span, including spans that fail the minimal screen criteria.",
+          "minimum_fields": [
+            "coherent_span_id",
+            "episode_count",
+            "growth_rate_eligible_episode_count",
+            "cell_lines",
+            "media_id",
+            "screen_eligible",
+            "screen_ineligibility_reason",
+            "growth_rate_definition",
+            "growth_rate_trend",
+            "growth_rate_trend_uncertainty",
+            "positive_trend_screen",
+            "branching_summary",
+            "qc_summary"
+          ]
+        },
+        "growth_rate_screen_method.md": "Definition of the growth-rate phenotype, rationale for the minimal criteria, trend estimation, uncertainty, and sensitivity handling.",
+        "figures": "PNG growth-rate trajectories for screen-eligible spans, with screen status and questionable observations visible."
+      },
+      "review_focus": [
+        "The episode-count and measurement filters are minimal, justified by trend estimability, and do not prematurely collapse the span set.",
+        "Every coherent span is accounted for, including explicit reasons for screen ineligibility.",
+        "A positive trend is treated as a permissive screen hit rather than evidence of adaptation or a significance-gated final result.",
+        "Trend uncertainty, branching, QC sensitivity, and individual trajectories remain visible.",
+        "Episode counts and growth-rate eligibility reconcile with span membership and Phase 1."
+      ]
+    },
+    {
+      "id": "phase_3_adaptation_discovery",
+      "order": 3,
+      "name": "Contextualize and evaluate screen-positive spans",
+      "objective": "Investigate screen-positive spans and branches for credible adaptation, biological context, and suitable reference comparisons without generalizing the screen result.",
+      "research_questions": [
+        "Which positive growth-rate trends are sustained and distinguishable from observation artifacts or isolated influential episodes?",
+        "What media change, selective pressure, culture perturbation, or lineage context precedes or accompanies each screen-positive span?",
+        "How do media components, oxygen, stressors, initial and final seeding quantities, and defensible densities inform each candidate's biological interpretation?",
+        "Which stable-context spans, screen-negative spans, siblings, or parallel lineages provide informative references?",
+        "Where in the lineage is each change localized, and how sensitive is it to outcome definition, QC set, branching, and context timing?"
+      ],
+      "output_contract": {
+        "episode_phenotypes.csv": "Exactly one row per episode in every Phase 2 screen-eligible span, including ineligible outcomes with Phase 1 reason codes.",
+        "screen_positive_context.csv": "One row per screen-positive span or branch summarizing media components, incoming context, seeding conditions, candidate selective pressures, and available references.",
+        "adaptation_candidate_scores.csv": "One row per evaluated span or branch, with evidence components, uncertainty, reference comparison, sensitivity status, and an explicit classification.",
+        "adaptation_candidate_manifest.csv": "The spans or branches selected for downstream modelling, with a concise scientific rationale and discovery-versus-validation status.",
+        "adaptation_discovery.md": "Interpretation of supported, indeterminate, and unsupported candidates without a universal adaptation claim.",
+        "figures": "Individual span and branch PNG trajectories for candidates and relevant references, with excluded or questionable observations visibly distinguished."
+      },
+      "review_focus": [
+        "Biological contextualization follows the broad screen and does not retroactively redefine screen eligibility.",
+        "Candidate signals are sustained and robust rather than single-episode extremes, timing artifacts, or products of the screen threshold.",
+        "Media composition, seeding conditions, selective context, stable references, and sibling branches are examined where available.",
+        "Individual trajectories and their biological contexts are inspectable.",
+        "Screening, candidate discovery, and validation evidence are not conflated."
+      ]
+    },
+    {
+      "id": "phase_4_baselines",
+      "order": 4,
+      "name": "Build baselines for the adaptation candidates",
+      "objective": "Establish strong nonmechanistic comparators on the valid observations and candidate/reference contrasts that will be used downstream.",
+      "output_contract": {
+        "baseline_model_comparison.csv": "Comparable fit and predictive results with explicit observation sets, uncertainty, and complexity.",
+        "baseline_assessment.md": "Selection of the strongest defensible comparators and limitations specific to each candidate class.",
+        "figures": "PNG diagnostics at both candidate-span and aggregate levels."
+      },
+      "review_focus": [
+        "Baselines are credible competitors for the actual downstream candidate analyses.",
+        "Every headline comparison is computed from auditable predictions on a fair observation set.",
+        "Uncertainty and candidate-to-candidate heterogeneity are visible.",
+        "Time-dependent models do not reintroduce Phase 1-invalid durations."
+      ]
+    },
+    {
+      "id": "phase_5_context_spatial_response",
+      "order": 5,
+      "name": "Test context and spatial explanations",
+      "objective": "For supported or scientifically informative adaptation candidates, test whether changing seeding response, environmental context, or spatial information improves explanation over the Phase 4 baselines.",
+      "research_questions": [
+        "Does the relationship between starting quantity or defensible density and subsequent phenotype change within the candidate lineage?",
+        "Does that change align with the inferred environmental transition and differ from relevant reference spans or branches?",
+        "Do image-derived spatial features improve population-phenotype fit, spatial-pattern prediction, or biological interpretation?",
+        "Which mechanistic interpretations remain distinguishable, and which remain underidentified?"
+      ],
+      "output_contract": {
+        "context_spatial_model_comparison.csv": "Candidate-specific and pooled comparisons against matched Phase 4 baselines.",
+        "context_spatial_assessment.md": "Biological interpretation of density response, media context, spatial contribution, uncertainty, and remaining nonidentifiability.",
+        "figures": "Representative individual-lineage and spatial PNG diagnostics linked to the model comparisons."
+      },
+      "review_focus": [
+        "The work directly tests explanations for the localized adaptation candidates rather than a generic all-span interaction.",
+        "Media and seeding-context interpretation remains connected to the modelling choices.",
+        "Added explanatory value is separated into population-fit, predictive, spatial-pattern, and mechanistic claims.",
+        "Claims remain proportional to validation strength and candidate-selection bias."
+      ]
+    },
+    {
+      "id": "phase_6_final_report",
+      "order": 6,
+      "name": "Synthesize candidate-specific evidence",
+      "objective": "Report which lineage contexts contain credible adaptation candidates and whether density response or spatial information improves their explanation.",
+      "output_contract": {
+        "FINAL_REPORT.md": "Concise synthesis linking every major claim to QC, cohort, candidate, baseline, and context/spatial artifacts.",
+        "figures": "A compact PNG figure set centered on the strongest candidates, their references, and major failure cases."
+      },
+      "review_focus": [
+        "The report answers the hypothesis through traceable candidate case studies and appropriate references.",
+        "Biological interpretation is integrated throughout rather than appended after modelling.",
+        "Negative and indeterminate findings are scoped locally and represented honestly.",
+        "No claim depends on a phenotype that failed the Phase 1 validity contract."
+      ]
+    }
+  ]
+}

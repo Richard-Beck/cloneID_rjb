@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "project_root": ".",
+  "run_dir": "tmp/ingest_lab_records/runs/replace_with_run_name",
+  "notebooks": [
+    {
+      "notebook_id": "NB-001",
+      "source_html": "data/labarchives/vural/1.html"
+    }
+  ],
+  "sources": {
+    "html_text_extractor": "scripts/labarchives_dump.py"
+  },
+  "context": {
+    "workflow_reference": ".codex/skills/ingest-lab-records/references/notebook-compression.md"
+  },
+  "agent": {
+    "codex_bin": "codex",
+    "model": "gpt-5.6-terra",
+    "reasoning": "medium",
+    "sandbox": "read-only",
+    "approval_policy": "never"
+  },
+  "slurm": {
+    "job_name": "notebook_compression",
+    "time": "00:45:00",
+    "memory": "8G",
+    "cpus": 2,
+    "qos": "small",
+    "partition": null,
+    "account": null,
+    "array_concurrency": null,
+    "extra_args": []
+  }
+}

@@ -1,0 +1,7 @@
+"series","detrending","n_observations","period_min_days","period_max_days","peak_period_days","peak_r_squared","global_permutation_p","global_null_95"
+"G1_A2","Logistic residual",15,4,20,4,0.308574412727416,0.9,0.618346238003049
+"G1_A2","Linear log-count residual",15,4,20,4,0.356717259157776,0.7525,0.628830064047391
+"G1_A4","Logistic residual",15,4,20,7.16,0.440696678829471,0.4755,0.64205244760865
+"G1_A4","Linear log-count residual",15,4,20,7.12,0.503587997702514,0.30325,0.668378207904835
+"Shared period, episode-specific phase","Logistic residual",30,4,20,7.2,0.261795335668384,0.896,0.464748521442169
+"Shared period, episode-specific phase","Linear log-count residual",30,4,20,7.2,0.34993281158479,0.42375,0.481929022864565

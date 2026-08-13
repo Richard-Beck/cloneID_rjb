@@ -1,1 +1,39 @@
-data
+# Local canonical inputs and generated analysis products
+/core_data/*
+!/core_data/README.md
+/data/
+
+# Live lab-record knowledge base (durable locally, intentionally not versioned)
+/lab_records/instance_protocol_db/
+
+# Agent, hypothesis-test, and development run products
+/tmp/
+/.tmp/
+/.cache/
+/dev/
+/hypothesis_tests/
+/hypotheses/dev/
+/deprecated_skills/
+/candidate_workflows/
+
+# Retain only the canonical hypothesis plan
+/plans/*
+!/plans/seed1_hypothesis_test_v3/
+!/plans/seed1_hypothesis_test_v3/plan.json
+
+# Superseded local protocol-extraction prototypes
+/prompt_templates/labarchive_protocol_extraction.txt
+/prompt_templates/protocol_rule_similarity_first_pass.txt
+/scripts/analyze_protocol_rule_similarity.py
+/scripts/plot_protocol_similarity_heatmap.R
+/scripts/protocol_rule_similarity.py
+/scripts/run_labarchive_protocol_extraction.sh
+/scripts/run_protocol_rule_similarity.sh
+/scripts/tests/test_protocol_rule_similarity.py
+
+# Language and editor caches
+**/__pycache__/
+*.py[cod]
+.DS_Store
+.Rhistory
+.Rproj.user/

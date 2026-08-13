@@ -7,8 +7,15 @@ core_dir <- file.path(root_dir, "core_data")
 out_dir <- file.path(root_dir, "data")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-for (path in list.files(out_dir, pattern = "\\.csv$", full.names = TRUE)) {
-  unlink(path)
+owned_outputs <- c(
+  "annotated_passaging_nodes.csv",
+  "passaging_edges.csv",
+  "culture_episodes.csv",
+  "culture_episode_edges.csv",
+  "metadata_graph_qc_summary.csv"
+)
+for (path in file.path(out_dir, owned_outputs)) {
+  if (file.exists(path)) unlink(path)
 }
 
 read_csv <- function(path) read.csv(path, stringsAsFactors = FALSE, na.strings = c("", "NA", "NaN"))
@@ -199,6 +206,7 @@ message("Reading metadata tables")
 passaging <- read_csv(file.path(core_dir, "passaging.csv"))
 media <- read_csv(file.path(core_dir, "media.csv"))
 perspective <- read_csv(file.path(core_dir, "perspective.csv"))
+message("No reviewed protocol mapping is configured; protocol fields will be blank")
 
 required_passaging <- c("id", "cellLine", "event", "passaged_from_id1", "passaged_from_id2",
                         "growthType", "passage", "cellCount", "date", "media",
@@ -209,6 +217,7 @@ if (!"id" %in% names(media)) stop("Missing media column: id")
 if (!all(c("whichPerspective", "origin", "n") %in% names(perspective))) stop("Missing perspective columns")
 
 passaging$id_clean <- clean_chr(passaging$id)
+passaging$protocol_id <- rep(NA_character_, nrow(passaging))
 passaging$cellLine_clean <- clean_chr(passaging$cellLine)
 passaging$event_clean <- clean_chr(passaging$event)
 passaging$parent1_clean <- clean_chr(passaging$passaged_from_id1)
@@ -602,6 +611,7 @@ episodes_out <- data.frame(
   episode_id = episode_ids,
   cellLine = episodes$cellLine_clean,
   seeding_date = episodes$date_parsed_iso,
+  seeding_protocol_id = episodes$protocol_id,
   seeding_media_id = episodes$media_clean,
   seeding_media_label = episodes$media_label,
   media_broad_category = episodes$media_broad_category,
@@ -643,6 +653,7 @@ episodes_out$qc_flags <- mapply(
 
 node_output <- nodes[, c(
   "id_clean", "cellLine_clean", "event_clean", "growthType_clean", "passage_num",
+  "protocol_id",
   "date", "date_parsed_iso", "parent1_clean", "parent2_clean",
   "media_clean", "media_label", "media_broad_category", "media_base_label",
   "media_energy_label", "media_antibiotic_label", "media_stressor_label", "oxygen_pct_num",
@@ -692,7 +703,7 @@ get_count <- function(name) if (name %in% names(edge_kind_counts)) as.integer(ed
 
 qc_summary <- data.frame(
   metric = c(
-    "passaging_rows", "unique_passaging_nodes", "media_rows", "perspective_rows",
+    "passaging_rows", "unique_passaging_nodes", "nodes_with_protocol_id", "media_rows", "perspective_rows",
     "perspective_unique_origins", "perspective_origins_missing_from_passaging",
     "row_edges_total", "row_edges_valid_parent_child", "row_observation_edges",
     "row_propagation_edges", "row_nonstandard_harvest_to_harvest_edges",
@@ -712,7 +723,7 @@ qc_summary <- data.frame(
     "ambiguous_unknown_perspective_rows"
   ),
   value = c(
-    nrow(passaging), length(unique(node_ids)), nrow(media), nrow(perspective),
+    nrow(passaging), length(unique(node_ids)), sum(!is.na(passaging$protocol_id)), nrow(media), nrow(perspective),
     length(perspective_origins), length(setdiff(perspective_origins, node_ids)),
     nrow(row_edges), nrow(valid_row_edges), get_count("observation_edge"),
     get_count("propagation_edge"), get_count("nonstandard_harvest_to_harvest"),

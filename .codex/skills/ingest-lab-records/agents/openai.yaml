@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ingest Lab Records"
+  short_description: "Compress notebooks and update experiment knowledge"
+  default_prompt: "Use $ingest-lab-records to compress a notebook or execute the next bounded protocol/instance database update turn."

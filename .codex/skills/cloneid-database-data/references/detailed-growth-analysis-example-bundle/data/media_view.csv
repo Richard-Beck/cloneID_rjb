@@ -1,0 +1,7 @@
+"media_id","base_medium","base_percent","serum","serum_percent","additional_component","additional_component_percent","energy_source","energy_source_nM","antibiotic_1","antibiotic_1_percent","antibiotic_2","antibiotic_2_percent","oxygen_percent"
+19,"RPMI-1640",90,"FBS",10,,,L_glutamine,2000000,"streptomycin",1,"Penicillin",1,20.5
+53,"McCoy's 5A (Modified)",90,"FBS",10,,,,,"streptomycin",1,"Penicillin",1,20.5
+82,"RPMI-1640 (modified)",90,"dFBS",10,"Phosphates",100,"Glucose",11101500,"streptomycin",1,"Penicillin",1,20.5
+83,"RPMI-1640 (modified)",90,"dFBS",10,,,"Glucose",3000000,"streptomycin",1,"Penicillin",1,20.5
+86,"RPMI-1640 (modified)",90,"dFBS",10,,,"Glucose",1500000,"streptomycin",1,"Penicillin",1,20.5
+88,"RPMI-1640 (modified)",90,"dFBS",10,,,"Glucose",750000,"streptomycin",1,"Penicillin",1,20.5

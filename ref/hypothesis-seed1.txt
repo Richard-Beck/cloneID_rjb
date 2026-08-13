@@ -1,0 +1,11 @@
+### Context
+Longitudinal growth trajectories in adapting cancer cell lineages are often summarized with phenomenological models such as exponential, logistic, or Gompertz growth. These models are useful baselines, but they may obscure biologically meaningful changes in how cells respond to their local environment. In adapting lineages, changes in apparent fitness may reflect changes in density response, contact inhibition, local interaction rules, motility, adhesion, spatial expansion, or other mechanisms that affect population growth in structured culture conditions.
+### Hypothesis
+During in vitro adaptation, some cancer lineages acquire growth phenotypes that are better explained by mechanistic models incorporating spatial information than by standard population-level growth curves alone.
+### Minimal testing frame
+Compare standard growth-curve models against one or more mechanistic model classes that utilize spatial information. Evaluate whether the augmented models improve explanation of longitudinal phenotype data, especially across connected series of passages. Ensure known culture covariates (e.g. media ID) are properly accounted for.
+### Guidelines/Definitions
+Minimal standard for a "better explanation" is *usually* a model which provides a better in-sample fit to a reasonably chosen subset of the cloneID data. Relevant considerations when choosing a reasonable subset may include: image data availability, valid/unambiguous metadata, sufficient sequence of passages, media changes,  availability of parallel/control lineages.
+Models need not be fully identifiable to consitute a "better explanation".
+Models may be "better" if they improve predictive performance under an alternative evaluation basis. For example, models which can predict spatial patterns/organization with concrete biological interpretations may be "better" than a phenomenological alternative, even when in-sample fit to cellcount/growth data is not materially improved. 
+Out of sample/holdout tests are useful evidence for establishing whether a model is "better", but need not be definitive.

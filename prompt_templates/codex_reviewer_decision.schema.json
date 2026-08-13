@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "phase_id": { "type": "string" },
+    "iteration": { "type": "integer", "minimum": 1 },
+    "decision": { "type": "string", "enum": ["PASS", "FAIL"] },
+    "summary": { "type": "string" },
+    "scientific_credibility_score": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "scope_completeness_score": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "data_integrity_score": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "hypothesis_alignment_score": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "artifact_quality_score": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "file_organization_hygiene_score": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "evidence_inspected": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "strengths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "blocking_issues": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "required_revisions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nonblocking_suggestions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "lazy_or_superficial_work_detected": { "type": "boolean" }
+  },
+  "required": [
+    "phase_id",
+    "iteration",
+    "decision",
+    "summary",
+    "scientific_credibility_score",
+    "scope_completeness_score",
+    "data_integrity_score",
+    "hypothesis_alignment_score",
+    "artifact_quality_score",
+    "file_organization_hygiene_score",
+    "evidence_inspected",
+    "strengths",
+    "blocking_issues",
+    "required_revisions",
+    "nonblocking_suggestions",
+    "lazy_or_superficial_work_detected"
+  ],
+  "additionalProperties": false
+}
