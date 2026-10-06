@@ -1,9 +1,10 @@
 ---
 name: ingest-lab-records
 description: >-
-  Compress laboratory notebooks without losing source accountability, and build or update lightweight Markdown knowledge bases linking
-  reusable protocols, experimental instances, and cloneID coherent spans. Use for notebook-compression runs, span-to-instance adjudication,
-  protocol/instance synthesis, candidate-span queues, and validation of these records.
+  Identify and interpret experimental instances from available laboratory records, compress notebooks without losing source accountability,
+  and build or update Markdown knowledge bases linking protocols, instances, and cloneID spans. Use when selecting experiments for a
+  hypothesis, reconstructing experimental design, reading existing instance records, compressing notebooks, adjudicating spans, or updating
+  and validating an instance/protocol database.
 ---
 
 # Ingest Lab Records
@@ -11,7 +12,20 @@ description: >-
 Treat this file as a workflow directory. Select the smallest applicable workflow and read only its listed resources. Do not preload every
 reference or script.
 
+Follow the research direction in `AGENTS.md`: hypothesis selection extends the PhysiCell baseline explicitly; this skill supplies
+laboratory evidence and database maintenance without invoking historical hypothesis runners or planning deliverables. When locating image,
+mask or per-cell feature evidence, use only CellSegmentations recursively, with `CELLSEGMENTATIONS_ROOT` or an explicit machine-local path.
+The RED root is `/share/lab_crd/CellSegmentations`; the workstation uses its own mount. Preserve relative paths in references.
+
 ## Workflows
+
+### Identify experimental instances
+
+- Purpose: identify one or more experimental instances that could test a hypothesis and reconstruct enough of their design to guide analysis.
+- Read: [references/identify-experimental-instances.md](references/identify-experimental-instances.md).
+
+This is a read-only evidence workflow. Use whatever records are available; an instance/protocol database is helpful but not required. Do not
+create or update database records unless the user separately requests that work.
 
 ### Notebook compression
 

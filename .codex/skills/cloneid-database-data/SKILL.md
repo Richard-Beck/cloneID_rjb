@@ -1,47 +1,40 @@
 ---
 name: cloneid-database-data
 description: >-
-  Use when rebuilding, querying, or interpreting cloneID passaging metadata, lineage graphs, culture episodes, coherent same-media spans,
-  graph distances, media and protocol conditions, Perspective assay anchors, refreshing raw database snapshots, cleaned cloneID CSV outputs,
-  or episode and lineage growth models.
+  Query, validate, rebuild and interpret cloneID passaging metadata, lineage graphs, culture episodes, coherent same-media spans,
+  graph distances, media conditions and LiquidNitrogen records; refresh raw database snapshots when requested.
 ---
 
 # cloneID Database Data
 
-Work from the repository root. Use the bundled scripts for deterministic graph and span operations. Read the shared reference before
-interpreting fields or QC flags.
+Work from the repository root. Raw snapshots under `core_data/` and regenerated outputs under `data/` are local state, excluded from Git.
+Use bundled scripts for deterministic graph and span operations and read the shared reference before interpreting fields or QC flags.
+Database refresh is opt-in; never run it merely because inputs may be stale.
 
-Raw snapshots under `core_data/` and regenerated outputs under `data/` are local state and are intentionally excluded from Git.
+## Current research direction
 
-Do not read or execute all workflows by default. Use the descriptions below to determine which files are relevant to your assigned task.
-Database refresh is opt-in: never run it merely because canonical inputs may be stale.
+Follow `AGENTS.md`. New user-specified hypotheses start from `dev/physicell_baseline/workflow.md` and explicitly extend its concrete model
+and counterfactual. Prior hypothesis workflows, automatic model-selection requirements and planning deliverables are deprecated, including
+those retained in this skill's historical references. Database preparation supports the chosen model; it does not prescribe a hypothesis
+workflow. Use the repo-local `physicell-modeling` skill for requested simulator calibration and reporting.
+
+Imaging and segmentation evidence comes only from **CellSegmentations**, including all subdirectories and per-cell feature outputs.
+Resolve the root from `CELLSEGMENTATIONS_ROOT` or an explicitly supplied path. On RED it is `/share/lab_crd/CellSegmentations`; on the
+workstation use its local mount. Preserve relative paths and do not silently fall back to other image collections.
 
 ## Workflows
 
-- name: Rebuild cleaned metadata
-  description: Regenerate the canonical row-level and episode-level metadata graph outputs.
-  path: [workflows/rebuild-cleaned-metadata.md](workflows/rebuild-cleaned-metadata.md)
+Read only resources relevant to the current task:
 
-- name: Analyze coherent spans
-  description: Summarize connected same-media episode spans and optionally compute distances between them.
-  path: [workflows/analyze-coherent-spans.md](workflows/analyze-coherent-spans.md)
-
-- name: Refresh core database snapshot
-  description: After a specific user request, download a staged Passaging, Media, Perspective, and LiquidNitrogen bundle with archived baselines and diffs.
-  path: [workflows/refresh-core-data.md](workflows/refresh-core-data.md)
+- [Rebuild cleaned metadata](workflows/rebuild-cleaned-metadata.md): regenerate row-level and episode-level graph outputs.
+- [Analyze coherent spans](workflows/analyze-coherent-spans.md): summarize connected same-media spans and optional distances.
+- [Refresh core database snapshot](workflows/refresh-core-data.md): after a specific request, stage Passaging, Media, Perspective and
+  LiquidNitrogen exports with archived baselines and diffs. Promotion is a separate requested action.
 
 ## References
 
-- name: Cleaned metadata reference
-  description: Canonical files, graph semantics, field meanings, QC guidance, and common query routing.
-  path: [references/cleaned-metadata-reference.md](references/cleaned-metadata-reference.md)
+- [Cleaned metadata reference](references/cleaned-metadata-reference.md): canonical files, graph semantics, fields, QC and query routing.
+- [Core input fields](references/core-data-fields.md): raw table schemas and meanings.
 
-- name: Growth-fitting function reference
-  description: Reusable R functions and input/output contracts for fitting and comparing growth models within culture episodes, rolling
-    coherent-span windows, and serial-passage lineages.
-  path: [references/lineage-growth-estimation.md](references/lineage-growth-estimation.md)
-
-- name: Detailed lineage-growth analysis example
-  description: A self-contained worked example with bundled R and data views; use it to reason from a prepared span through metadata review,
-    model support, fair comparison, parameter interpretation, culture-practice alternatives, and follow-up analysis.
-  path: [references/detailed-growth-analysis-example.md](references/detailed-growth-analysis-example.md)
+Existing canonical evidence may be reused through `data/` when suitable for the user's question. Keep hypothesis-specific audits, reports,
+figures and interpretation in the current hypothesis-test folder. Never recover inputs from an old hypothesis-test run.

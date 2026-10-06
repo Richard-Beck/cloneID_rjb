@@ -1,7 +1,8 @@
 # Local canonical inputs and generated analysis products
 /core_data/*
 !/core_data/README.md
-/data/
+/data/*
+!/data/README.md
 
 # Live lab-record knowledge base (durable locally, intentionally not versioned)
 /lab_records/instance_protocol_db/
@@ -37,3 +38,21 @@
 .DS_Store
 .Rhistory
 .Rproj.user/
+
+# Portable PhysiCell example; all other development state remains local
+!/dev/
+/dev/*
+!/dev/physicell_baseline/
+/dev/physicell_baseline/*
+!/dev/physicell_baseline/workflow.md
+!/dev/physicell_baseline/mechanistic_model.md
+!/dev/physicell_baseline/adaptation_proposal.md
+!/dev/physicell_baseline/PhysiCell_settings.xml
+!/dev/physicell_baseline/cell_rules.csv
+!/dev/physicell_baseline/baseline_runtime.cpp
+
+# Publishing assets and private source evidence never enter Git
+/release-assets/
+/_site/
+/lab_records/instance_protocol_source_snapshots/
+*.tar.gz.gpg

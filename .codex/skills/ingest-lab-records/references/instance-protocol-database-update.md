@@ -90,8 +90,14 @@ protocol steps.
 - `surface-notebook-summaries.py`: show short or selected medium summaries when targeted retrieval requires them.
 - `search-lab-records.py` and `extract-notebook-evidence.py`: retrieve compressed-notebook evidence.
 - `validate-instance-protocol-db.py`: perform only structural checks—paths, IDs, references, queue spans, and turn notes.
-- `run-instance-update-test.py`: run up to `--max-turns`, stopping on failure or completion. An initially empty queue seeds the longest
-  never-resolved span. With `--stop-when-queue-empty`, the runner stops when the queue next becomes empty after one or more turns; without it,
-  each empty queue seeds the next longest never-resolved span. Every turn gets frozen before/after states, validation, and `events.txt`.
+- `run-instance-update-test.py`: run up to `--max-turns` ingestion turns (default 10, using Terra with medium reasoning), stopping on failure or
+  completion. An initially empty queue seeds the longest never-resolved span with at least `--minimum-passaging-entries` entries (default 4).
+  With `--stop-when-queue-empty`, the runner stops when the queue next becomes empty after one or more turns; without it, each empty queue
+  seeds the next eligible longest never-resolved span. Unless `--skip-compliance-review` is supplied, it then launches a final Sol/xhigh
+  review turn that writes 3–5 prioritized compliance improvements to `<database>/compliance/*.md`. Every ingestion and review turn gets
+  frozen before/after states, validation, and `events.txt`.
+- `run-instance-update-test.py --previous-compliance-review REVIEW.md --user-disposition DISPOSITION.md`: before the ingestion turns, launch
+  a Sol/xhigh disposition turn that follows only the human-approved decisions in `DISPOSITION.md` against `REVIEW.md`. Both paths are
+  required together. Use `assets/compliance-disposition.template.md` as a starting point for the human decision file.
 
 Do not consult legacy protocol or instance catalogs unless explicitly requested.
