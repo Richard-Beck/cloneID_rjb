@@ -26,7 +26,7 @@ def main():
     notes = 'Password-encrypted collaborator snapshots. Source dates are apparent raw-file modification times. See snapshot.json and the download page for dates and SHA-256 checksums.'
     subprocess.run(['gh', 'release', 'create', args.tag, *files, '--repo', args.repo,
                     '--target', args.target, '--title', 'Research snapshots ' + args.tag,
-                    '--notes', notes, '--latest=false'], check=True)
+                    '--notes', notes], check=True)
     print('Uploaded encrypted assets. Publish the page with:')
     print('gh workflow run downloads-pages.yml --repo ' + args.repo + ' -f release_tag=' + args.tag)
 
