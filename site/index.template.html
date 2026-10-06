@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cloneID research downloads</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,sans-serif;color:#172c31;background:#f2f5f3}body{max-width:850px;margin:0 auto;padding:40px 22px;line-height:1.6}h1{font-size:2.2rem;line-height:1.2}h2{margin-top:0}article{background:white;border:1px solid #d8e3dc;border-radius:12px;padding:24px;margin:20px 0}.muted{color:#536663;font-size:.9rem}a{color:#126454}.download{font-weight:650}code{overflow-wrap:anywhere}pre{white-space:pre-wrap;background:#e6ede9;padding:16px;border-radius:8px}footer{margin-top:30px}
+</style></head><body>
+<header><p>cloneID · shared research resources</p><h1>Research data downloads</h1>
+<p>Password-encrypted snapshots for collaborators. Obtain the shared password from the project owner.</p>
+<p class="muted">Packaged: {{PACKAGED_AT}}. Source dates below reflect apparent underlying file modification times, separately from packaging.</p></header>
+<main>{{BUNDLES}}
+<section><h2>Open a download</h2><p>Install GnuPG, download an archive, then decrypt it in your terminal. GnuPG prompts for the shared password.</p>
+<pre>gpg --output snapshot.tar.gz --decrypt &lt;downloaded-file.tar.gz.gpg&gt;
+tar -xzf snapshot.tar.gz</pre>
+<p>The notebook snapshot includes processed records and supporting source evidence; its audit report describes review completeness.</p>
+<p>The imaging archive is a manifest. Image pixels, masks and feature data stay in CellSegmentations on RED or the workstation. Configure that machine’s mount using <code>CELLSEGMENTATIONS_ROOT</code>.</p></section></main>
+<footer><a href="https://github.com/Richard-Beck/cloneID_rjb">Repository and skill documentation</a> · <a href="https://github.com/Richard-Beck/cloneID_rjb/blob/main/docs/skills.md">Skill quickstart</a></footer>
+</body></html>

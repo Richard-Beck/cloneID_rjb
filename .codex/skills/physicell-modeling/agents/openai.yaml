@@ -1,0 +1,4 @@
+interface:
+  display_name: "PhysiCell Modeling"
+  short_description: "Fit mechanistic cell models and report simulator results"
+  default_prompt: "Use $physicell-modeling to propose, fit, and report a mechanistic cell-growth model within an agreed compute budget."
