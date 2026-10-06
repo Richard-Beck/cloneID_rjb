@@ -45,7 +45,9 @@ The plaintext output stays local under `tmp/`; distribute it only through the pa
 - `header_samples.json`: a bounded sample of CSV/TSV headers per directory, including the detected delimiter. Files ending in `.csv` may
   actually be tab-separated. DetectionResults samples contain per-cell positions and morphology features, and their schemas can differ.
 - `summary.json`: scan completion, counts, timestamps, and limitations. `source_last_updated` is the latest observed regular-file modification
-  time, not the acquisition date. A copied file or corrected output can change that date.
+  time. The public page labels this **Latest observed file modification**. It is neither a verified acquisition date nor an arrival date;
+  copy tools may preserve old timestamps, and metadata clocks may be inaccurate. It cannot establish that no newer imaging exists.
+  Manifest generation is recorded separately. A copied file or corrected output can change the observed modification date.
 - `errors.csv`: skipped files/directories and scan-budget failures. Check `complete_scan` before treating absence from the manifest as evidence
   that a file is unavailable.
 

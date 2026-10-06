@@ -33,9 +33,10 @@ def build(assets, output):
             raise ValueError('Encrypted asset checksum/size mismatch')
         total += size
         esc = html.escape
+        date_label = 'Latest observed file modification' if bundle['id'] == 'imaging' else 'Raw source file last updated'
         cards.append(f'''<article><h2>{esc(bundle['id'].title())}</h2>
 <p>{esc(bundle['description'])}</p>
-<p>Source last updated: <strong>{esc(str(bundle.get('source_last_updated') or 'Unknown'))}</strong></p>
+<p>{date_label}: <strong>{esc(str(bundle.get('source_last_updated') or 'Unknown'))}</strong></p>
 <p class="muted">{esc(bundle.get('source_date_basis', 'Latest apparent raw-source file modification time; not independently verified.'))}</p>
 <p><a class="download" href="{esc(name, quote=True)}">Download encrypted archive</a> ({size / 1048576:.1f} MiB)</p>
 <details><summary>SHA-256 checksum</summary><code>{digest}</code></details></article>''')
