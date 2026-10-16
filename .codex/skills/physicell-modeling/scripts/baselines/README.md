@@ -1,8 +1,10 @@
 # Prepared-data SUM-159 baseline pilot
 
 This source package promotes the scripted setup derived from the accepted `20261016_180145` lineage pilot and concluded
-`20261016_190611` perspective pilot. It preserves their model-specific numerical, scoring and selection implementation. It has
-not been scientifically rerun after promotion and is not a universal adapter for other cell lines or prepared-data schemas.
+`20261016_190611` perspective pilot. It preserves their model-specific numerical, scoring and selection implementation. The first
+fresh attempt completed lineage fitting and stopped before perspective fitting because only one new shared parent met the configured
+competitive cutoff, which requires two. The full fresh workflow remains unvalidated. This is a study-specific adapter for the supplied
+prepared-data schema.
 
 The repository entry point is `python scripts/run_baselines.py`; its default is a dry run. The example is
 `examples/sum159/baseline.json`. `--help` uses only the standard library. The current Python runs the CLI; `paths.python: null`
@@ -17,9 +19,10 @@ python scripts/run_baselines.py mock --config examples/sum159/baseline.json
 ```
 
 Missing local prerequisites are reported explicitly. In the public example, scientific execution is disabled. `dry-run`,
-`preflight`, `prepare`, `scheduler-plan`, `report`, `accounting` and `mock` never submit jobs. The explicit future `submit`
+`preflight`, `prepare`, `scheduler-plan`, `report`, `accounting` and `mock` never submit jobs. The explicit `submit`
 command requires `execution.authorized: true`, usable local prerequisites and verified scheduler limits. Scientific workers
-require SLURM. There is no separate environment-token or repeated scientific approval flow. No launch is authorized now.
+require SLURM. There is no separate environment-token or repeated scientific approval flow; the example remains disabled until a run
+is authorized and its local configuration is prepared.
 
 All relative `paths` values, including environment overrides, resolve from the selected configuration file's directory.
 `~` is expanded; other variables embedded in path strings are not expanded. Environment overrides are
@@ -39,8 +42,9 @@ counts; remaining columns are coverage, logged gap, Clark-Evans and25 pooled log
 joins are checked. Frozen classified measurements are data reuse, not parameter reuse. Raw reconstruction is outside this boundary;
 any future image/mask/features work must use CellSegmentations and verified joins, without historical-root fallbacks.
 
-Fresh deterministic lineage fits precede simulator ranking and ridge initialization. Perspective starts use only that new run's
-competitive, numerically valid shared parents; two state13 blocks share one density/cluster initialization. The confirmed terminal
+Fresh lineage starts with deterministic seeds precede simulator ranking and ridge initialization. Perspective starts use only that new run's
+competitive, numerically valid shared parents; at least two must lie within 20% of the best native loss. Two state13 blocks share one
+density/cluster initialization. The confirmed terminal
 procedure is top5 objective +5 diverse per alpha with two permanent shared anchors, a24-passage/two-seed native screen plus minority
 probes, eligible bounded refinement, two best supported distinct sources plus a competitive diverse third, then independent all118
 passages/four-seed validation plus probes. These counts are visible configuration. Reporting accepts the fit for now after the planned
@@ -49,8 +53,8 @@ acceptance threshold is added. The co-located serial/alternating diagnostics fro
 
 The complete18-node held-job scheduler plan keeps each candidate's fit -> finalization -> native dependencies, failure salvage,
 stage ranking, global CPU cap and final reporting. Default pilot settings reserve9,701 task slots, including2,176 lineage and6,280
-perspective native trajectories; these are plans, not runs or newly approved resource budgets. Relative native-stage deadlines start
-when each stage manifest is prepared, including subsequent queue waiting. Official future accounting maps jobs through frozen task
+perspective native trajectories; this task count does not imply successful scientific completion. Relative native-stage deadlines start
+when each stage manifest is prepared, including subsequent queue waiting. Scheduler accounting maps jobs through frozen task
 tables and separates measured CPU, allocated CPU, elapsed, queue and dependency time. Current-report snapshots are labeled partial.
 
 ## External engine prerequisites
@@ -58,7 +62,7 @@ tables and separates measured CPU, allocated CPU, elapsed, queue and dependency 
 The model-specific source assets target **PhysiCell 1.14.2**. Maintain separate isolated external checkouts/builds for the two engines.
 Preserve each checkout's `core/`, `modules/`, `BioFVM/`, Makefile and license. For lineage, install
 `vendor/assets/physicell/baseline_runtime.cpp` as that checkout's `main.cpp`. For perspective, install
-`assets/perspective/physicell/main.cpp` and its adjacent `wgd_runtime.h` at the checkout root. In each checkout, the documented build
+`assets/perspective/physicell/main.cpp` and its adjacent runtime header at the checkout root. In each checkout, the documented build
 command is `make -j4 PhysiCell_custom_module_OBJECTS=`; the empty override avoids duplicate custom-module symbols. Keep the resulting
 executables outside this package, and supply their distinct paths through config/environment. No engine is built or executed by setup.
 
@@ -69,7 +73,8 @@ skill's older generic29-column observer/engine, is not a replacement for these r
 and fingerprints are recorded in `source_manifest.json`; external compiled binary identities are frozen per run.
 
 Compute-node Python/library compatibility, actual scheduler array/job limits, native transfer and the numerical shared microscopy
-embedding remain execution-time checks. No scientific model, engine, scheduler probe or real job was invoked to validate this promotion.
+embedding are execution-time checks. The first fresh attempt passed compute-node libraries, observer/native transfer and scheduler
+limits; its later competitive-parent failure prevented perspective fitting and validation.
 Known assay timing proxies and the restricted shared-parent embedding remain scientific limitations from the pilots.
 
 The test suite generates invented fixtures at runtime under the configured scratch directory, including an intentionally synthetic

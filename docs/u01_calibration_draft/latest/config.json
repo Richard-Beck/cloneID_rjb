@@ -34,11 +34,12 @@
   "scale_bar_pixels_full": 200,
   "figure_size_inches": [
     11.5,
-    7.25
+    7.0
   ],
   "alternative_size_inches": [
     11.5,
-    7.25
+    7.0
   ],
-  "dpi": 240
+  "dpi": 240,
+  "projection_accounting": ".local/projection_perspective_accounting.psv"
 }

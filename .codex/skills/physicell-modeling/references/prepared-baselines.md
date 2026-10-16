@@ -25,9 +25,9 @@ The mock command uses synthetic fixtures. A real dry run requires the configured
 writes a plan without fitting, simulating or contacting SLURM. The example keeps execution disabled. `preflight` distinguishes setup
 validation from permission/resource readiness; a strict readiness failure is not evidence that a scientific run occurred.
 
-Read [the example](../../../../examples/sum159/README.md) for completed pilot results and local-path configuration. The reusable pipeline
-has synthetic/static coverage but has not yet completed a fresh scientific campaign. Do not present those checks as fit validation or
-measured scientific runtime.
+Read [the example](../../../../examples/sum159/README.md) for completed pilot results, the first fresh attempt and local-path configuration.
+That attempt completed lineage fitting and stopped before perspective fitting because its competitive-parent prerequisite was unmet.
+Synthetic/static coverage and partial scientific execution do not establish successful end-to-end calibration.
 
 ## SUM-159 model and observations
 
@@ -39,6 +39,10 @@ division and survival, with zero state transitions. Density and cluster initiali
 Initialize perspective candidates from competitive simulator-ranked shared lineage parents produced by the **same new run**. The
 founder-ridge vector is not the parent: founder-specific density/cluster parameters do not embed in the perspective parameterization.
 Check the shared physical embedding explicitly; stochastic native realizations need not have identical scores.
+
+This pilot adapter requires at least two valid shared parents within 20% of the best native microscopy loss. It stops the perspective
+branch when that prerequisite is unmet. Preserve the failed attempt and its costs; changing the cutoff, adding fits or reusing historical
+vectors changes the planned campaign and needs the user's direction.
 
 The accepted observer has 30 columns: log1p(total retained live + dead count), log1p(dead count), coverage, logged gap, Clark-Evans
 organization and 25 relative log-area quantiles. The composite cost weights total count at 0.5 and each of dead count, coverage,
@@ -87,6 +91,11 @@ completed results on failure. Resume only the requested missing work rather than
 The runner records source/input identities, task outcomes and selections. Report measured CPU use separately from allocation and
 elapsed time, include failed/cancelled work in campaign accounting, and state whether any live report-job snapshot is partial.
 Allocation does not establish actual peak CPU utilization.
+
+The [CPU plotting example](../../../../examples/sum159/plot_cpu_utilization.py) reads saved task accounting. Its scheduler-adjusted replay
+preserves dependencies, task durations and long tails under the original CPU cap while removing scheduler waiting. Busy CPU is estimated
+from task CPU time divided by elapsed time, not instantaneous sampling. Complete accounting can describe a scientifically stopped run;
+never represent cancelled, unrun stages as completed work.
 
 Show full-field count and spatial diagnostics, accompanying-data behavior, matched saved observations/native fields and important
 limitations. Display crops are presentation choices; all fitted statistics retain their full-field geometry. Keep combined scores

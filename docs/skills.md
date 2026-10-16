@@ -56,8 +56,9 @@ Lineage-determined and perspective-guided models are alternative ways of definin
 requires SUM-159, hypoxia or two genomic states. A new hypothesis should identify its baseline and the model change to test.
 
 The reusable runner is `scripts/run_baselines.py`, backed by the modelling skill's `scripts/baselines/` package and
-`examples/sum159/baseline.json`. Its default is a dry run; the example has scientific execution disabled. The full fresh-fit pipeline
-has not been scientifically executed. See the example for local inputs and commands. Other model comparisons remain available when
+`examples/sum159/baseline.json`. Its default is a dry run; the example has scientific execution disabled. The first fresh attempt
+completed lineage fitting and stopped before perspective fitting because its competitive-parent prerequisite was unmet. See the
+example for the recorded outcome, local inputs and commands. Other model comparisons remain available when
 requested; the historical stationary/constant/adaptation comparison is not the definition of these two baselines.
 
 A skill follows your requested scope. Explicitly agreed scientific choices and budgets carry forward; repeat approval is not required

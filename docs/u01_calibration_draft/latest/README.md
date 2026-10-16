@@ -35,18 +35,18 @@ legend and short axis labels. Every F group retains brightfield, segmentation, l
 four small images. Within-group gutters are 0.015 inches. Modality and F1--F4/acquisition labels are overlaid with translucent backing;
 no outside image headings consume row space. All four cases remain present.
 
-The figure is 11.5 x 7.25 inches, compared with the original 18 x 24 inches: 80.7% less figure area. The complete-field alternative remains in the isolated development folder; it is not duplicated here.
+The figure is 11.5 x 7.00 inches, compared with the original 18 x 24 inches: 81.4% less figure area. The complete-field alternative remains in the isolated development folder; it is not duplicated here.
 
 ## Panel choices
 
 - A highlights 2N hypoxia 1 A18 in gold and links it to E and F2. F1--F4 and molecular sampling proxies remain visible.
-- B pools all 220 chromosome counts into a histogram with bins two chromosomes wide. The existing nonWGD/WGD clusters retain blue/pink
+- B pools all 220 chromosome counts into a histogram with bins two chromosomes wide. The existing 2N/4N clusters retain blue/pink
   colors; measurement-source labels are removed.
-- C shows actual used/allocated CPU-hours separately for the concluded lineage campaign (34.0/70.1) and perspective campaign
-  (128.4/197.4), with approximately 40 and 31 minutes elapsed, respectively. These are full recorded scheduler scopes; local work is
-  outside those totals. No hypothetical PhysiCell-only projection is shown.
+- C compares measured CPU use (34.0 lineage; 128.4 perspective CPU-hours) with a fixed-call-budget PhysiCell-only estimate
+  (12,144 and 167,299 CPU-hours). A logarithmic axis keeps both visible. The projected values are conditional estimates, not measured
+  native-only optimization runs. The method and unpriced composition work are documented below.
 - D removes normoxia trajectories and normoxia-specific observations. Hypoxia 1/hypoxia 2 use the same dark ink with solid/dashed lines, and the lineage
-  reference is dotted. Molecular observations and frozen fitted proxies have distinct marker shapes. The perspective trajectory uses
+  reference is dotted. D shows the living 4N fraction; molecular observations and frozen fitted proxies have distinct marker shapes. The perspective trajectory uses
   the final frozen physical vector and correction, matching the frozen mixtures used to initialize native fields.
 - E illustrates the six cost components using one accepted lineage-defined example: total/dead count, coverage, relative area, gap and
   organization. Coefficients are 0.5 for total count and 0.1 for each other term. The gold acquisition-time marker links directly to F2.
@@ -87,7 +87,7 @@ The lineage source is the accepted scratch campaign `20261016_180145_sum159_tota
 the pooled alpha-100 path. Its full-support simulator loss is 9.2971, independently reconstructed with the current six coefficients. Aggregate
 weighted contributions remain in `.local/accepted_lineage_loss_components.csv`; they are full-support values, not scores for a displayed crop.
 
-The perspective source is `20261016_190611_sum159_total_count_latent_state`, using `refined_no_wgd_0p0_072` from its final-validation
+The perspective source is `20261016_190611_sum159_total_count_latent_state`, using the selected refined alpha=0 example from its final-validation
 report. It is the displayed example with the lowest reported conditional rechecked diagnostic and smallest composition drift among
 the three finalists. It is not described as a self-consistent native winner. The figure uses its frozen physical vector and frozen
 selection correction, the exact saved frozen-cohort log-odds arrays, and fresh main-field snapshots initialized at those same mixtures.
@@ -158,4 +158,51 @@ Gold frames identify the observed field, its segmentation and the lineage snapsh
 the perspective snapshot is not highlighted. `.local/gap_label_verification.json` verifies the plotted numerical arrays and image pixels
 against the incumbent, excluding only the requested decorative-frame changes. Crop selection is exactly unchanged.
 
-The preceding latest is preserved locally in `docs/u01_calibration_draft/revisions/revision_09/`; earlier local archives remain intact. Revision archives and private `.local/` evidence/reference inputs are excluded from the Git checkpoint. Normal rebuilding requires the named local pilot artifacts and `.local/reference_inputs/`, but no historical archive.
+## Fixed-call-budget compute projection
+
+Panel C replaces each analytical search/refinement call with a complete native objective at the benchmark support, holding the number
+of calls fixed. All measured CPU outside those searches is retained, including the planned native checks. Values use task `TotalCPU`;
+reserved capacity and elapsed time times capacity do not enter the estimate. This compares an equal evaluation budget, without claiming
+equal convergence, parameters or elapsed runtime. Local work outside scheduler accounting remains excluded.
+
+```text
+projected_CPUh = measured_CPUh - analytical_search_CPUh
+                 + sum(objective_calls(stage) * mean_complete_native_CPUh(stage))
+```
+
+| Campaign/stage | Recorded calls | Native support per objective | Complete benchmark objectives | Mean CPUh/call |
+| --- | ---: | --- | ---: | ---: |
+| Lineage, shared | 11,789 | 343 acquisitions, 2 seeds, 16 native tasks | 11 | 0.218852 |
+| Lineage, founder-specific | 22,878 | 343 acquisitions, 2 seeds, 32 native tasks | 45 | 0.416781 |
+| Perspective, exploration | 53,016 | 343 acquisitions/118 passages, 4 seeds; 472 main + 128 probes | 2 | 3.122105 |
+| Perspective, refinement | 556 | Same full support and replication | Same 2 | 3.122105 |
+
+The lineage search phases consumed 5.024740 CPU-hours; 28.991960 measured CPU-hours are retained. All 16 shared and 60 founder-specific
+candidates have CPU accounting, but only 11 and 45 have complete finite native scientific scores. The others are excluded on scientific
+support, not missing accounting. Excluded shared objectives average 0.150 CPU-hours versus 0.219 for complete ones; excluded founder-specific objectives average
+0.454 versus 0.417. This conditioning excludes both quick and costly cases, and optimized checkpoints do not sample the entire search domain. The 10th--90th percentile benchmark-cost sensitivity gives 8,941--15,383 projected CPU-hours,
+not a confidence interval.
+
+The perspective searches consumed 86.523654 CPU-hours; 41.907996 measured CPU-hours are retained. Two fully complete final native
+objectives provide the benchmark; the displayed example's timed-out probe is excluded from this successful-objective benchmark without
+imputation. Main fields and probes are priced separately in local provenance. Their total costs give 145,717--188,881 CPU-hours as a
+benchmark sensitivity range, not confidence limits. Halving the native replication would approximately halve the replacement-call term.
+
+The earlier perspective screen used 24 passages and 2 seeds (48 main + 64 probe cases), averaging 0.797631 CPU-hours per candidate.
+That smaller, long-duration-enriched subset is not a full objective and is not used for the primary projection or scaled by passage count.
+Full-objective timing uses all 118 passages, four seeds and the actual probe protocol.
+
+The perspective estimate assumes one native main/probe batch per call at the frozen culture mixtures. Extra native iterations needed to
+solve composition-history closure, native correction fitting, and analytical closure guidance without a measured pure-native counterpart
+are unpriced. Therefore this is a conditional cost scenario, not a measured or fully specified native-only optimization. Additional closure
+iterations could increase it; different parameter regions or a different call budget could change it in either direction.
+
+`compute_projection.py` reconstructs counters from saved optimizer status files, maps lineage stream tasks and perspective phase/case
+indices to measured `TotalCPU`, and retains complete-support checks. `.local/compute.json` records individual benchmark costs, excluded
+lineage cases, separate main/probe costs, screen sensitivity, algebra and caveats. The saved perspective accounting snapshot with array
+indices is an explicit local rebuild dependency; normal figure rebuilding does not query the scheduler.
+
+The figure footer is removed. Numerical validation limitations and the complete-field/crop distinction remain in this text and caption.
+Internal compatibility keys retain their original spelling; all rendered genomic-state names are 2N/4N.
+
+The preceding latest is preserved locally in `docs/u01_calibration_draft/revisions/revision_10/`; earlier local archives remain intact. Revision archives and private `.local/` evidence/reference inputs are excluded from the Git checkpoint. Normal rebuilding requires the named local pilot artifacts, `.local/reference_inputs/` and the saved projection accounting snapshot, but no historical archive.

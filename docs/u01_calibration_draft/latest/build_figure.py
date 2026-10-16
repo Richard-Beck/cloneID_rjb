@@ -41,6 +41,7 @@ from matplotlib.patches import Rectangle
 OUT = Path(__file__).resolve().parent
 sys.path.insert(0, str(OUT))
 from crop_selection import choose_window
+from compute_projection import project as project_compute
 REPO = next(p for p in OUT.parents if (p / "AGENTS.md").is_file())
 LOCAL = OUT / ".local"
 CONFIG = json.loads((OUT / "config.json").read_text())
@@ -405,7 +406,7 @@ def plot_histogram(ax, perspective):
     assert len(d) == 220 and not d.source_cell_id.duplicated().any()
     assert np.array_equal(d.current_high_state.to_numpy(), (d.chromosome_count > 66).astype(int))
     bins = np.arange(39.5, 104.5, 2)
-    for state, color, name in [(0, LOW, "nonWGD"), (1, HIGH, "WGD")]:
+    for state, color, name in [(0, LOW, "2N"), (1, HIGH, "4N")]:
         ax.hist(d.loc[d.current_high_state.eq(state), "chromosome_count"], bins=bins,
                 color=color, label=name, rwidth=.93, edgecolor="white", linewidth=.35)
     ax.set(xlim=(39, 104), xlabel="Chromosomes per cell", ylabel="Cells")
@@ -564,29 +565,27 @@ def image_panel(ax, array, crop=True, saved_bar=False, highlight=False, crop_rec
 
 
 def plot_compute(ax, lineage, perspective):
-    usage = lineage["report"]["compute_usage"]
-    p = read(perspective["root"] / "report/compute.json")
-    assert sum(p["states"].values()) == p["accounting_records"]
-    assert all(s == "COMPLETED" or s.startswith("CANCELLED") for s in p["states"])
-    used = [usage["Measured SLURM CPU-hours"], p["actual_cpu_hours"]]
-    allocated = [usage["Allocated SLURM CPU-hours"], p["allocated_cpu_hours"]]
-    for i, (u, a) in enumerate(zip(used, allocated)):
+    projection = project_compute(lineage, perspective, OUT/CONFIG["projection_accounting"], read, track)
+    used = [projection[key]["used_cpu_hours"] for key in ["lineage", "perspective"]]
+    estimated = [projection[key]["projected_cpu_hours"] for key in ["lineage", "perspective"]]
+    for i, (u, a) in enumerate(zip(used, estimated)):
         ax.bar(i, a, width=.65, facecolor="white", edgecolor=GRAY, hatch="///", lw=.7)
         ax.bar(i, u, width=.43, color="#536977", edgecolor="white", lw=.4)
-        ax.text(i, a+5, f"{a:.1f}", ha="center", va="bottom", fontsize=5.6)
-        ax.text(i, u-5, f"{u:.1f}", ha="center", va="top", fontsize=5.5, color="white")
-    ax.set(ylim=(0, 250), xlim=(-.65, 1.65), xticks=[0, 1], xticklabels=["Lineage", "Persp."], ylabel="CPU-hours")
+        ax.text(i, a*1.08, f"{a/1000:.0f}k", ha="center", va="bottom", fontsize=5.6)
+        ax.text(i, u/1.12, f"{u:.0f}", ha="center", va="top", fontsize=5.5, color="white")
+    ax.set(yscale="log", ylim=(10, max(estimated)*5), xlim=(-.65, 1.65), xticks=[0, 1], xticklabels=["Lineage", "Persp."], ylabel="CPU-hours (log)")
+    ax.set_yticks([10, 100, 1000, 10000, 100000], ["10", "100", "1k", "10k", "100k"])
+    ax.minorticks_off()
     ax.tick_params(axis="x", labelsize=5.8)
     ax.legend(handles=[Rectangle((0, 0), 1, 1, color="#536977", label="Used"),
-                       Rectangle((0, 0), 1, 1, facecolor="white", edgecolor=GRAY, hatch="///", label="Allocated")],
+                       Rectangle((0, 0), 1, 1, facecolor="white", edgecolor=GRAY, hatch="///", label="PC-only est.")],
               fontsize=5.3, loc="upper left", frameon=False, handlelength=.8, handletextpad=.35, borderpad=.1)
     clean(ax)
-    ax.text(.5, -.25, f"Elapsed: {usage['Serial wall minutes from first submit to last finish']:.0f} / {p['elapsed_wall_minutes']:.0f} min",
+    ax.text(.5, -.25, "Same objective-call budget",
             transform=ax.transAxes, ha="center", fontsize=5.8)
-    CHECKS["compute_scope"] = "Separate full recorded SLURM scopes of the two concluded named campaigns; no hypothetical projection"
-    dump(LOCAL / "compute.json", dict(lineage=usage, perspective=p,
-         used_cpu_hours=used, allocated_cpu_hours=allocated, order=["Lineage", "Perspective"],
-         combined_used_cpu_hours=sum(used), combined_allocated_cpu_hours=sum(allocated)))
+    CHECKS["compute_scope"] = "Measured full campaign TotalCPU versus conditional fixed-call-budget PhysiCell-only estimate; no allocations"
+    CHECKS["compute_projection_method"] = projection["method"]
+    dump(LOCAL / "compute.json", projection)
 
 
 def plot_fractions(aa, perspective):
@@ -606,17 +605,17 @@ def plot_fractions(aa, perspective):
                 trace = saved[f"trace_{i}"]
                 latent = saved[f"latent_{i}"]
                 if ep["arm"] == "common":
-                    xy.append((0., 1-float(expit(np.interp(ep["duration_days"], trace[:, 0], latent)))))
+                    xy.append((0., float(expit(np.interp(ep["duration_days"], trace[:, 0], latent)))))
                 else:
                     passage = int(eid.split("_A")[1].split("_")[0])
                     keep = trace[:, 0] <= ep["duration_days"]
                     tt = np.r_[trace[keep, 0], ep["duration_days"]]
                     xx = passage-1+tt/ep["duration_days"]
-                    yy = 1-expit(np.interp(tt, trace[:, 0], latent))
+                    yy = expit(np.interp(tt, trace[:, 0], latent))
                     xy.extend(zip(xx, yy))
             xy = np.array(sorted(xy))
             ax.plot(xy[:, 0], xy[:, 1], color=INK, lw=1.05, ls=style)
-        ax.axhline(1 if founder == "2N" else 0, color=GRAY, ls=":", lw=.9)
+        ax.axhline(0 if founder == "2N" else 1, color=GRAY, ls=":", lw=.9)
         for assay in assays:
             if assay["founding_group"] != founder:
                 continue
@@ -633,31 +632,32 @@ def plot_fractions(aa, perspective):
             z = norm.ppf(.975)
             center = (high+z*z/(2*n))/(1+z*z/n)
             half = z*np.sqrt(high*(1-high)/n+z*z/(4*n*n))/(1+z*z/n)
-            low, lo, hi = 1-high, 1-min(1, center+half), 1-max(0, center-half)
-            ax.errorbar(x, low, yerr=[[max(0, low-lo)], [max(0, hi-low)]],
+            lo, hi = max(0, center-half), min(1, center+half)
+            ax.errorbar(x, high, yerr=[[max(0, high-lo)], [max(0, hi-high)]],
                         fmt="^" if arm == "O2" else "o", color=INK, capsize=1.5, ms=2.6, lw=.65)
-            fitted_low = 1-assay["frozen_fraction"]
-            ax.scatter(x, fitted_low, marker="D", s=13, facecolor="white", edgecolor=INK, lw=.65, zorder=5)
+            fitted_high = assay["frozen_fraction"]
+            ax.scatter(x, fitted_high, marker="D", s=13, facecolor="white", edgecolor=INK, lw=.65, zorder=5)
             exports.append(dict(founder=founder, assay=assay["assay_id"], arm=arm, passage=x,
-                                observed_nonWGD=low, predicted_nonWGD=fitted_low, n=n))
+                                observed_4N=high, predicted_4N=fitted_high, n=n))
         ax.set(xlim=(-.8, 24.7), ylim=(-.05, 1.05), xticks=[0, 6, 12, 18, 24],
                yticks=[0, .5, 1], xlabel="Passage")
         ax.text(.04, .92, founder, transform=ax.transAxes, ha="left", va="top", fontsize=6.3,
                 bbox=dict(facecolor="white", edgecolor="none", alpha=.8, pad=.2))
         clean(ax)
-    aa[0].set_ylabel("Alive nonWGD fraction")
+    aa[0].set_ylabel("Living 4N fraction")
     aa[1].tick_params(labelleft=False)
     aa[0].legend(handles=[Line2D([], [], color=INK, ls="-", lw=1, label=DISPLAY_ARMS["O1"]),
                          Line2D([], [], color=INK, ls="--", lw=1, label=DISPLAY_ARMS["O2"]),
                          Line2D([], [], color=GRAY, ls=":", lw=1, label="Lineage")],
-                 fontsize=6, loc="lower left", frameon=False, handlelength=1.8, borderpad=.1)
+                 fontsize=6, loc="upper left", bbox_to_anchor=(0, .86), frameon=False, handlelength=1.8, borderpad=.1)
     aa[1].legend(handles=[Line2D([], [], color=INK, ls="", marker="o", ms=3, label="Observed"),
                          Line2D([], [], color=INK, ls="", marker="D", ms=3,
                                 markerfacecolor="white", label="Frozen fit")],
-                 fontsize=6, loc="upper right", frameon=False, handlelength=1, borderpad=.1)
+                 fontsize=6, loc="lower left", frameon=False, handlelength=1, borderpad=.1)
     pd.DataFrame(exports).to_csv(LOCAL / "hypoxia_assays.csv", index=False)
     CHECKS["fraction_plot_excludes_normoxia"] = True
     CHECKS["fraction_trajectories_monochrome"] = True
+    CHECKS["fraction_display_state"] = "Living 4N; direct high-state trajectory and Wilson intervals"
     CHECKS["fraction_trajectory_source"] = "Final-validation frozen cohort latent_i arrays with frozen correction, verified against exact report BLUE curves"
     CHECKS["fraction_passage_coordinate"] = "Episode A(p): p-1+t/duration; assays mark preceding parent harvest; common-root harvest is zero"
 
@@ -760,14 +760,11 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
     plot_compute(axes(fig, 3.13, 2.64, 1.15, 1.45), lineage, perspective)
     plot_fractions([axes(fig, x, 2.64, 1.42, 1.45) for x in [5.10, 6.84]], perspective)
     heading(fig, .35, 4.63, "F", "")
-    legends = [(ALIVE, "Mask: alive"), (DEAD, "Dead"), (LOW, "Model: nonWGD"), (HIGH, "Model: WGD")]
+    legends = [(ALIVE, "Mask: alive"), (DEAD, "Dead"), (LOW, "Model: 2N"), (HIGH, "Model: 4N")]
     fig.legend(handles=[Rectangle((0, 0), 1, 1, color=c, label=name) for c, name in legends],
                loc="upper right", bbox_to_anchor=(.955, 1-4.61/size[1]), ncol=4, fontsize=6.3,
                frameon=False, handlelength=1, columnspacing=1.1, borderpad=.1)
     evidence = plot_fields(fig, fields, lineage, perspective, compact)
-    foot_top = size[1]-.25
-    text(fig, .58, foot_top, "Perspective validation: 8.27 pp maximum composition recheck shift; 127/128 probes. "
-         "All cost statistics use complete fields; crops are display only.", fontsize=5.9, color=GRAY)
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     image_axes = [a for a in fig.axes if a.get_gid() == "F_image"]
@@ -783,6 +780,7 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
                and t.get_window_extent(renderer).ymax <= a.get_window_extent(renderer).ymax
                for a, t in overlays)
     assert all(a.get_title() == "" for a in fig.axes)
+    assert not any("wgd" in t.get_text().lower() for t in fig.findobj(matplotlib.text.Text))
     CHECKS[f"{'compact' if compact else 'full_field'}_image_labels_inside"] = True
     cost_axes = [a for a in fig.axes if a.get_gid() == "E_cost_facet"]
     assert len(cost_axes) == 5
@@ -794,6 +792,7 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
                   matched_image_rows=2, matched_image_columns=8, descriptive_panel_titles=False,
                   highlighted_cost_modalities=["Brightfield", "Segmentation", "Lineage"],
                   perspective_snapshot_highlighted=False, display_branch_names=DISPLAY_ARMS,
+                  user_facing_state_labels=["2N", "4N"], footer_removed=True,
                   panel_mapping=dict(A="Lineage", B="Chromosome histogram", C="Compute",
                                      D="Hypoxia trajectories", E="Cost example", F="Matched fields"))
     stem = CONFIG.get("output_stem", "current") if compact else "alternative_full_fields"
@@ -855,15 +854,15 @@ def main():
                   lineage_candidate=CONFIG["lineage"]["candidate"],
                   perspective_candidate=CONFIG["perspective"]["candidate"],
                   lineage_replicates=2,
-                  expected_figure_pixels=[2760, 1740],
+                  expected_figure_pixels=[2760, 1680],
                   approved_area_square_inches=432,
                   compact_area_square_inches=float(np.prod(CONFIG["figure_size_inches"])),
                   compact_area_reduction_fraction=1-float(np.prod(CONFIG["figure_size_inches"]))/432)
-    assert Image.open(OUT / f"{CONFIG.get('output_stem', 'current')}.png").size == (2760, 1740)
+    assert Image.open(OUT / f"{CONFIG.get('output_stem', 'current')}.png").size == (2760, 1680)
     dump(LOCAL / "verification.json", CHECKS)
     dump(LOCAL / "fields.json", dict(observed=observed_evidence, compact=compact, full=full,
                                      cost_example=cost["native_info"]))
-    for path in [Path(__file__), OUT / "crop_selection.py", OUT / "config.json"]:
+    for path in [Path(__file__), OUT / "crop_selection.py", OUT / "compute_projection.py", OUT / "config.json"]:
         track(path, "isolated draft source")
     dump(LOCAL / "dependencies.json", list(DEPENDENCIES.values()))
     dump(LOCAL / "runtime.json", dict(python=sys.version, executable=sys.executable, threads=1))

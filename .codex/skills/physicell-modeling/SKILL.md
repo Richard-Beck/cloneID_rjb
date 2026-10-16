@@ -17,8 +17,9 @@ perspective-guided baseline, investigator-chosen accompanying measurements defin
 pilot case study, not a universal choice of cell line, conditions or states.
 
 For these baselines and fresh fitting from prepared data, read [prepared-baselines](references/prepared-baselines.md). It routes to
-the dedicated runner, observer and fixed screening/refinement/validation procedure. The completed pilots and the scientifically
-unexecuted scratch runner are distinct evidence. Do not impose the older stationary/constant/adaptation comparison on this workflow.
+the dedicated runner, observer and fixed screening/refinement/validation procedure. Keep completed pilot evidence separate from the
+fresh scripted attempt, which completed lineage fitting and stopped at its competitive-parent prerequisite before perspective fitting.
+Do not impose the older stationary/constant/adaptation comparison on this workflow.
 
 For other requested model comparisons, use the general guidance below and the relevant references. Keep full runs and private
 provenance local, normally under `hypothesis_tests/`; use `tmp/` or `dev/` for development. Track reusable code/configuration and selected

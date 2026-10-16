@@ -52,6 +52,8 @@ Both named [SUM-159 pilots](../examples/sum159/README.md) are complete. Their se
 [current figure](u01_calibration_draft/latest/baseline_multipanel.png) and
 [calibration text](u01_calibration_draft/latest/calibration.md).
 
-The reusable fresh-fit runner is implemented and checked with synthetic inputs. The complete fresh scientific rerun has not started;
-its fit quality and end-to-end resource use remain to be demonstrated. That rerun can follow this checkpoint under an agreed resource
-envelope. Testing the workflow on an alternative lineage is subsequent work.
+The reusable fresh-fit runner has synthetic checks and a recorded scientific attempt from prepared data. That attempt completed
+lineage fitting and stopped at the perspective prerequisite: only one new shared parent met the configured competitive cutoff,
+which requires two. The selected lineage fit was weaker than the accepted pilot. The complete fresh workflow and its perspective
+fit quality remain to be demonstrated; the [example](../examples/sum159/README.md) records the stopped attempt and its resource use.
+Testing on an alternative lineage remains subsequent work.
