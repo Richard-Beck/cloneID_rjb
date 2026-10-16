@@ -47,25 +47,36 @@ by reading this guide.
 | `cloneid-database-data` | `Use $cloneid-database-data to download a staged database refresh for review.` | A staged export, provenance and diffs under `tmp/core_data_refresh/`; promotion remains separate. |
 | `ingest-lab-records` | `Use $ingest-lab-records to identify experiments relevant to <question> and reconstruct their design from the processed notebook.` | Read-only evidence retrieval with source references. |
 | `ingest-lab-records` | `Use $ingest-lab-records to update one bounded item in the local instance/protocol database and validate it.` | A serial local update, turn note and validation results. |
-| `physicell-modeling` | `Use $physicell-modeling to propose a model extending the PhysiCell baseline for <question>, using <lineages> and a budget of <resources>.` | A concrete scientific model, data/observation mapping and resource proposal before dependent fitting. |
+| `physicell-modeling` | `Use $physicell-modeling to inspect a fresh-fit plan for both baselines from these prepared data: <path>. Do not launch it.` | A concrete input, selection, validation and resource plan; no scientific execution. |
+| `physicell-modeling` | `Use $physicell-modeling to propose a baseline extension for <question>, using <lineages> and a budget of <resources>.` | A concrete scientific model, data/observation mapping and resource proposal before dependent fitting. |
 | `physicell-modeling` | `Use $physicell-modeling to rebuild the report from these saved results: <current result folder>.` | An inspectable HTML report without starting new fits. |
 
-For a new hypothesis, start with the concrete [PhysiCell baseline](../dev/physicell_baseline/workflow.md), name the counterfactual and the
-extension you want to test. Older hypothesis runners and planning requirements are deprecated. A skill should follow your requested scope,
-not automatically run every workflow it contains. Explicitly agreed scientific choices and budgets carry forward; repeat approval is not
-required for the same decision.
+For the current baseline workflow, read [workflow.md](workflow.md) and the [SUM-159 pilot](../examples/sum159/README.md).
+Lineage-determined and perspective-guided models are alternative ways of defining biological identity and parameter sharing. Neither
+requires SUM-159, hypoxia or two genomic states. A new hypothesis should identify its baseline and the model change to test.
+
+The reusable runner is `scripts/run_baselines.py`, backed by the modelling skill's `scripts/baselines/` package and
+`examples/sum159/baseline.json`. Its default is a dry run; the example has scientific execution disabled. The full fresh-fit pipeline
+has not been scientifically executed. See the example for local inputs and commands. Other model comparisons remain available when
+requested; the historical stationary/constant/adaptation comparison is not the definition of these two baselines.
+
+A skill follows your requested scope. Explicitly agreed scientific choices and budgets carry forward; repeat approval is not required
+for the same decision.
 
 ## Inspect and retain outputs
 
 - `core_data/`: local raw database inputs, never committed.
 - `data/`: cleaned metadata, inventory and reusable analysis products, never committed.
 - `lab_records/instance_protocol_db/`: local curated instances/protocols, updated serially and validated after each bounded turn.
-- `hypothesis_tests/<timestamp>_<description>/`: the current hypothesis's frozen inputs, code, reports, figures and interpretation.
+- `hypothesis_tests/<timestamp>_<description>/`: local frozen inputs, fitting results, reports, figures and interpretation for a run.
 - `tmp/` or `dev/`: other development and temporary work.
 
-Reuse canonical analysis products through `data/`, with appropriate freshness and coverage checks. Do not retrieve observations or results
-from old hypothesis-test folders. The imaging inventory and notebook are evidence sources; assess protocol, timing, identity and coverage
-before treating them as measurements for a model.
+Reuse prepared measurements with explicit provenance, freshness and coverage checks. A fresh fit does not import an old fitted vector,
+ranking or optimizer checkpoint. Rebuilding a figure from a named completed pilot may reuse its saved results. Detailed manifests and
+private provenance remain local; reusable code, configuration and the selected public figure/text are tracked.
+
+The imaging inventory and notebook are evidence sources; assess protocol, timing, identity and coverage before treating them as
+measurements for a model.
 
 The relevant skill entrypoint links its validators and workflows. Useful read-only checks include:
 
@@ -73,7 +84,8 @@ The relevant skill entrypoint links its validators and workflows. Useful read-on
 python3 .codex/skills/cloneid-database-data/scripts/validate_core_inputs.py
 python3 .codex/skills/ingest-lab-records/scripts/validate-instance-protocol-db.py --help
 python3 .codex/skills/physicell-modeling/scripts/test_package.py
+python scripts/run_baselines.py mock --config examples/sum159/baseline.json --output tmp/baseline_mock
 ```
 
-The last command checks bundled model/report primitives on synthetic inputs. It neither invokes PhysiCell nor submits jobs, and does not
-validate a new dataset adapter or fitted biological model.
+The last two commands check model/report primitives and the prepared-baseline pipeline with synthetic inputs. They neither invoke
+PhysiCell nor submit jobs, and do not establish the quality or runtime of a scientific fit.

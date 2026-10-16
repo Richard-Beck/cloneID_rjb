@@ -1,0 +1,20 @@
+{
+  "scope": "Prepared-data SUM-159 pilot workflow; promoted implementation has not been scientifically rerun.",
+  "lineage_origin": "Accepted 20261016_180145 total-count shared/ridge pilot",
+  "perspective_origin": "Concluded 20261016_190611 total-count latent-state pilot",
+  "implementation_origin": "Completed isolated scripted setup with91synthetic/static checks",
+  "mapping": {
+    "vendor/core/": "Accepted30-column/six-component total/dead observer and approximation/scoring/transfer primitives",
+    "vendor/lineage_model.py": "Accepted shared/ridge model, with run-local configuration and provenance controls",
+    "vendor/perspective_model.py": "Current-state no-transition model; same-new-run shared-parent embedding",
+    "vendor/perspective_search.py": "Executed exploratory optimizer",
+    "vendor/native_diagnostics.py": "Executed conditional native screen/final-validation diagnostics, without launcher or absolute campaign dates",
+    "vendor/native_refinement.py": "Executed bounded native-informed refinement",
+    "terminal.py": "Executed top5+5/anchor screen and distinct-source finalist rules; portable manifests",
+    "scheduler.py": "Held-job candidate-local dispatch, accounting and fixed terminal endpoint",
+    "vendor/assets/physicell/": "Canonical model-specific PhysiCell 1.14.2 lineage baseline_runtime.cpp and XML template",
+    "assets/perspective/physicell/": "Canonical model-specific PhysiCell 1.14.2 perspective main.cpp/wgd_runtime.h and XML template"
+  },
+  "excluded": "No private prepared data, compiled engines, historical source snapshots, detailed provenance or run/validation outputs are included.",
+  "physicell_version": "1.14.2"
+}

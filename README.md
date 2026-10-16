@@ -1,16 +1,20 @@
 # cloneID agentic research workflows
 
-> **Research direction reset — 2026-09-21:** All prior hypothesis-testing workflows and plans are deprecated. The current starting
-> point is the concrete [PhysiCell baseline](dev/physicell_baseline/workflow.md): a reusable modelling example and counterfactual for
-> user-specified hypotheses. Develop explicit extensions from that baseline; do not resume legacy hypothesis runners or treat their
-> requirements as the current workflow. Data preparation and laboratory-record maintenance remain supporting infrastructure.
-
 This repository supports reproducible, agent-assisted research with cloneID data. It brings together the reusable workflows needed to
 reconstruct cell-culture lineages from the cloneID database, connect those lineages to laboratory-notebook evidence, organize experimental
-instances and protocols, and execute reviewed scientific hypothesis tests.
+instances and protocols, and fit mechanistic cell-growth models.
 
-The repository tracks workflow code, Codex skills, prompts, schemas, and hypothesis plans. Raw database snapshots, derived metadata, the live
-laboratory-record knowledge base, and analysis runs are local state and are intentionally excluded from Git.
+Two baseline definitions provide starting points for hypothesis-driven model changes, refitting and comparison. In the
+**lineage-determined baseline**, lineage evidence defines clone identity and biological parameter sharing. In the
+**perspective-guided baseline**, investigator-chosen accompanying measurements define states and parameter sharing.
+[SUM-159 progressive hypoxia](examples/sum159/README.md) is the completed pilot case study; the definitions apply beyond this example.
+
+The repository tracks reusable workflow code, Codex skills, example configuration and selected figures/text. Raw database snapshots,
+derived measurements, the live laboratory-record knowledge base, full analysis runs and private provenance remain local.
+
+**Checkpoint status:** both pilots are complete and the [figure and calibration text](docs/u01_calibration_draft/latest/calibration.md)
+use those results. The scripted workflow for fresh fitting from prepared data is implemented and tested with synthetic inputs; its full
+scientific rerun has not started. See the [workflow](docs/workflow.md) for the fitting boundary and next step.
 
 ## High-level replication sequence
 
@@ -18,17 +22,18 @@ laboratory-record knowledge base, and analysis runs are local state and are inte
 2. Validate the snapshot and generate the cleaned metadata graph, coherent lineage spans, and availability manifests under `data/`.
 3. Extract and compress the relevant laboratory notebooks.
 4. Ingest the notebook and lineage evidence into the live instance/protocol database under `lab_records/instance_protocol_db/`.
-5. Use the PhysiCell baseline to formulate a user-specified hypothesis, its counterfactual, and the required model extension from the
-   prepared metadata and laboratory-record evidence.
+5. Freeze the prepared measurements and experimental design, fit the lineage-determined and perspective-guided baselines, then evaluate
+   hypothesis-driven changes against the chosen baseline.
 
 Start with the [user guide](docs/skills.md) for encrypted snapshot setup, machine-local imaging paths, example requests and output locations.
-See [snapshot publishing](docs/publishing.md) and [imaging data guidance](docs/imaging-data.md).
+See [snapshot publishing](docs/publishing.md), [imaging data guidance](docs/imaging-data.md) and the
+[SUM-159 example](examples/sum159/README.md). Existing prepared data can be reused for fresh fitting without repeating raw reconstruction.
 
 Detailed guidance, commands, validation rules, and interpretation notes are provided by the skills under `.codex/skills/`:
 
 - `cloneid-database-data` covers core-data refresh, cleaned metadata, coherent spans and lineage interpretation.
 - `ingest-lab-records` covers notebook compression, experimental evidence retrieval and construction of the instance/protocol database.
-- `physicell-modeling` covers agreed mechanistic model calibration, simulator scoring and interactive reporting.
+- `physicell-modeling` covers prepared-data baseline fitting, agreed model extensions, simulator scoring and reporting.
 
 Imaging and segmentation inputs come only from **CellSegmentations**, including its subdirectories and per-cell feature products. On RED,
 set `CELLSEGMENTATIONS_ROOT=/share/lab_crd/CellSegmentations`; on the workstation, set it to the local mount. The detailed recursive

@@ -1,0 +1,44 @@
+{
+  "reference_inputs": ".local/reference_inputs",
+  "output_stem": "baseline_multipanel",
+  "render_alternative": false,
+  "lineage": {
+    "campaign": "hypothesis_tests/20261016_180145_sum159_total_count_shared_ridge",
+    "candidate": "ridge_0100_10",
+    "selection_alpha": 100.0,
+    "status": "Accepted scratch fit",
+    "count_schema": "total_dead"
+  },
+  "perspective": {
+    "campaign": "hypothesis_tests/20261016_190611_sum159_total_count_latent_state",
+    "candidate": "refined_no_wgd_0p0_072",
+    "selection_alpha": 0.0,
+    "status": "Concluded pilot example; frozen physical vector and correction, conditional native validation",
+    "count_schema": "total_dead",
+    "selection_policy": "Displayed example with lowest reported conditional rechecked diagnostic and smallest composition drift among three finalists; not a self-consistent native winner"
+  },
+  "cost_example": {
+    "episode_id": "SUM-159_NLS_2N_O1_A18_seed",
+    "row": 57,
+    "tile": "tl",
+    "model": "lineage",
+    "replicate": 0
+  },
+  "display_crop_shape_yx": [
+    550,
+    700
+  ],
+  "crop_selection": "Deterministic own-full-field representative window; see crop_selection.py and local crop_selection.json",
+  "crop_area_fraction": 0.25,
+  "scale_bar_pixels_cropped": 100,
+  "scale_bar_pixels_full": 200,
+  "figure_size_inches": [
+    11.5,
+    7.65
+  ],
+  "alternative_size_inches": [
+    11.5,
+    7.65
+  ],
+  "dpi": 240
+}

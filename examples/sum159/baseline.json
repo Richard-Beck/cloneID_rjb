@@ -1,0 +1,451 @@
+{
+  "schema_version": 1,
+  "case_study": "SUM-159 total retained/dead counts in hypoxia; a pilot adapter for the two general baseline definitions",
+  "baseline_definitions": {
+    "lineage_determined": "Biological parameter sharing/separation follows lineage evidence; this pilot compares a shared 15-vector with two founder-specific 15-vectors coupled by ridge.",
+    "perspective_guided": "Biological parameter sharing follows investigator-specified current 2N/4N states across founding lineages; this pilot fixes state transitions to zero and carries continuous living composition."
+  },
+  "execution": {
+    "authorized": false,
+    "perspective_source_accepted": true,
+    "terminal_policy": "conditional_native_correction_refinement_independent_finalists",
+    "reason": "Scientific execution is disabled in this public prepared-data pilot example. Full refitting is deferred.",
+    "acceptance_policy": "After the planned independent final validation, report diagnostics and accept the fit for now. No adaptive correction/refit/additional native batch follows."
+  },
+  "paths": {
+    "prepared_data": null,
+    "output_root": "../../tmp/baselines/runs",
+    "scratch_root": "../../tmp/baselines",
+    "python": null,
+    "lineage_engine": null,
+    "perspective_engine": null,
+    "cellsegmentations_root": null,
+    "cellsegmentations_manifest": null
+  },
+  "inputs": {
+    "mode": "frozen_prepared_measurements",
+    "scratch_boundary": "Fresh parameter fitting from locally supplied prepared measurements and curated episode/assay inputs; no historical fitted vector/ranking/checkpoint/prediction inputs.",
+    "permit_legacy_image_access": false,
+    "canonical_preparation_complete": true,
+    "required": [
+      "observations.csv",
+      "observations.npz",
+      "field_measurements.csv",
+      "metadata.json",
+      "episodes.json",
+      "assays.json",
+      "lineage_edges.csv",
+      "schedule_all.csv",
+      "excluded_schedule.csv"
+    ],
+    "prepared_hashes": {
+      "assays.json": "2fe28d4b9846cdd2e38e4925ed66b4c6890172b754f9b489a54a27053c046bcb",
+      "episodes.json": "09f95ed0112ec4f37e8e75833fd807ecbcca56f283b958b92d1ab872bba0c0ec",
+      "excluded_schedule.csv": "1d75dd835c4f09f1fc4cd4c1f105a291f67679ce47785ae9cbb24e187b195c95",
+      "field_measurements.csv": "b988b4a340f515c57e840c30b8a4151915373f53934780cbc15ecc1efa19d211",
+      "lineage_edges.csv": "58f3985923732fd4b8919e6c76c2a3e98261fce638e3ff6eb373e17fa96798a1",
+      "metadata.json": "79cbe66a75025c900c3c601248d012c04d2108a98f5f194c5d6c0731a9ab7098",
+      "observations.csv": "11ddff76374417ed32d46ee36439eabe7f1446ed8766f1fdff671116a8cbbcd3",
+      "observations.npz": "081880e12313beeff4736b01afabb4f1b38fde3cc9dd1375bf3128ee0baf3da1",
+      "schedule_all.csv": "e741e33e5502e680012c0e11836a5040b65d51d81ee729b08bbc7ad531e49f2e"
+    },
+    "canonical_preparation_complete_scope": "Prepared-data boundary accepted by user; raw imaging reconstruction is outside this fitting setup."
+  },
+  "observation": {
+    "shape_columns": 30,
+    "weight_columns": 6,
+    "components": [
+      "total_count",
+      "dead_count",
+      "coverage",
+      "relative_area",
+      "gap",
+      "clark_evans"
+    ],
+    "coefficients": [
+      0.5,
+      0.1,
+      0.1,
+      0.1,
+      0.1,
+      0.1
+    ],
+    "count_offset": 14.247292974389811,
+    "field_shape": [
+      1100,
+      1400
+    ],
+    "pixel_units": "direct mask pixels",
+    "count_conversion": "density * 1540000 then log1p; first column total live+dead, second dead",
+    "replicate_scoring": "score each seed separately then arithmetic mean",
+    "loss_kind": "episode/founder-balanced composite residual; not an independent-observation likelihood"
+  },
+  "lineage": {
+    "natural_bounds": [
+      [
+        0.55,
+        0.995
+      ],
+      [
+        0.1,
+        100000.0
+      ],
+      [
+        0.03,
+        100.0
+      ],
+      [
+        3.0,
+        120.0
+      ],
+      [
+        1e-06,
+        0.005
+      ],
+      [
+        1.0,
+        1000.0
+      ],
+      [
+        0.25,
+        4.0
+      ],
+      [
+        0.02,
+        0.98
+      ],
+      [
+        0.01,
+        100.0
+      ],
+      [
+        0.001,
+        100.0
+      ],
+      [
+        0.01,
+        100.0
+      ],
+      [
+        0.1,
+        24.0
+      ],
+      [
+        0.0001,
+        3.0
+      ],
+      [
+        0.25,
+        72.0
+      ],
+      [
+        0.0001,
+        0.75
+      ]
+    ],
+    "parameter_names": [
+      "xeq",
+      "speed",
+      "K",
+      "radius",
+      "rho0",
+      "m0",
+      "vinit",
+      "fG",
+      "oxygen_ratio",
+      "oxygen_half",
+      "oxygen_hill",
+      "G1_reference_rate",
+      "death_rate",
+      "dead_duration_hours",
+      "initial_dead_fraction"
+    ],
+    "groups": [
+      "2N",
+      "4N"
+    ],
+    "shared_starts": 16,
+    "ridge_starts_per_alpha": 12,
+    "alphas": [
+      0.0,
+      1.0,
+      10.0,
+      100.0,
+      1000.0
+    ],
+    "optimizer_seconds": 240,
+    "steps": 600,
+    "replicates": 2,
+    "seed_shared_starts": 202610161800,
+    "seed_shared_candidates": 202610161900,
+    "seed_ridge": 202610162000,
+    "seed_native": 2026101600,
+    "first_start_policy": "illustrative_parameters_with_prepared_early_count_density",
+    "parent_competitive_window": 0.2,
+    "ridge_parent_other_policy": "competitive_maximin_then_best_fallback",
+    "native_timeout_seconds": 900
+  },
+  "perspective": {
+    "parameter_names": [
+      "founder_high_2N",
+      "founder_high_4N",
+      "log_w",
+      "dmax",
+      "q",
+      "log_rho0",
+      "log_m0",
+      "log_low_xeq",
+      "log_low_speed",
+      "log_low_K",
+      "log_low_radius",
+      "log_low_vinit",
+      "log_low_fG",
+      "log_low_oxygen_ratio",
+      "log_low_oxygen_half",
+      "log_low_oxygen_hill",
+      "log_low_G1_reference_rate",
+      "log_low_death_rate",
+      "log_low_dead_duration_hours",
+      "log_low_initial_dead_fraction",
+      "log_high_xeq",
+      "log_high_speed",
+      "log_high_K",
+      "log_high_radius",
+      "log_high_vinit",
+      "log_high_fG",
+      "log_high_oxygen_ratio",
+      "log_high_oxygen_half",
+      "log_high_oxygen_hill",
+      "log_high_G1_reference_rate",
+      "log_high_death_rate",
+      "log_high_dead_duration_hours",
+      "log_high_initial_dead_fraction"
+    ],
+    "bounds": [
+      [
+        0.0,
+        1.0
+      ],
+      [
+        0.0,
+        1.0
+      ],
+      [
+        -27.631021115928547,
+        -0.6931471805599453
+      ],
+      [
+        0.0,
+        1.0
+      ],
+      [
+        0.0,
+        1.0
+      ],
+      [
+        -13.815510557964274,
+        -5.298317366548036
+      ],
+      [
+        0.0,
+        6.907755278982137
+      ],
+      [
+        -0.5978370007556204,
+        -0.005012541823544286
+      ],
+      [
+        -2.3025850929940455,
+        11.512925464970229
+      ],
+      [
+        -3.506557897319982,
+        4.605170185988092
+      ],
+      [
+        1.0986122886681098,
+        4.787491742782046
+      ],
+      [
+        -1.3862943611198906,
+        1.3862943611198906
+      ],
+      [
+        -3.912023005428146,
+        -0.020202707317519466
+      ],
+      [
+        -4.605170185988091,
+        4.605170185988092
+      ],
+      [
+        -6.907755278982137,
+        4.605170185988092
+      ],
+      [
+        -4.605170185988091,
+        4.605170185988092
+      ],
+      [
+        -2.3025850929940455,
+        3.1780538303479458
+      ],
+      [
+        -9.210340371976182,
+        1.0986122886681098
+      ],
+      [
+        -1.3862943611198906,
+        4.276666119016055
+      ],
+      [
+        -9.210340371976182,
+        -0.2876820724517809
+      ],
+      [
+        -0.5978370007556204,
+        -0.005012541823544286
+      ],
+      [
+        -2.3025850929940455,
+        11.512925464970229
+      ],
+      [
+        -3.506557897319982,
+        4.605170185988092
+      ],
+      [
+        1.0986122886681098,
+        4.787491742782046
+      ],
+      [
+        -1.3862943611198906,
+        1.3862943611198906
+      ],
+      [
+        -3.912023005428146,
+        -0.020202707317519466
+      ],
+      [
+        -4.605170185988091,
+        4.605170185988092
+      ],
+      [
+        -6.907755278982137,
+        4.605170185988092
+      ],
+      [
+        -4.605170185988091,
+        4.605170185988092
+      ],
+      [
+        -2.3025850929940455,
+        3.1780538303479458
+      ],
+      [
+        -9.210340371976182,
+        1.0986122886681098
+      ],
+      [
+        -1.3862943611198906,
+        4.276666119016055
+      ],
+      [
+        -9.210340371976182,
+        -0.2876820724517809
+      ]
+    ],
+    "groups": [
+      "2N",
+      "4N"
+    ],
+    "alphas": [
+      0.0,
+      0.1,
+      1.0,
+      10.0
+    ],
+    "starts_per_alpha": 250,
+    "optimizer_seconds": 300,
+    "steps": 600,
+    "seed_search": 202610161906,
+    "seed_native": 2026102000,
+    "shared_parent_competitive_window": 0.2,
+    "minimum_competitive_shared_parents": 2,
+    "parent_selection": "first floor(N/2) best; remaining round-robin competitive simulator-ranked other shared parents",
+    "state_parameter_indices_from_lineage": [
+      0,
+      1,
+      2,
+      3,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "common_initialization_indices_from_lineage": [
+      4,
+      5
+    ],
+    "no_transitions": true,
+    "assay_loss_coefficient": 1.0,
+    "state_ridge_denominator": "log(1.5)",
+    "non_nesting": "Only fully shared lineage vectors embed physically. Founder-specific rho0/m0 ridge vectors do not embed. Assay loss changes the comparison objective; shared stochastic native scores are not identical two-state realizations.",
+    "native_policy_provisional": false,
+    "conditional": {
+      "screen_candidates_per_alpha": 10,
+      "screen_quality_per_alpha": 5,
+      "screen_passages": 24,
+      "screen_replicates": 2,
+      "minority_probe_fractions": [
+        0.01,
+        0.05,
+        0.95,
+        0.99
+      ],
+      "refinement_seconds": 100,
+      "finalists": 3,
+      "final_replicates": 4,
+      "bootstrap_replicates": 100,
+      "screen_candidate_pool_floor": 30,
+      "screen_candidate_pool_cap": 100,
+      "screen_candidate_pool_fraction": 0.6,
+      "permanent_anchors": 2,
+      "finalist_best_count": 2,
+      "finalist_competitive_fraction": 0.2,
+      "finalist_competitive_absolute": 1.0,
+      "finalist_diversity_pool_stop": 12,
+      "native_stage_deadline_seconds": {
+        "screen": 7200,
+        "final_validation": 7200
+      },
+      "deadline_origin": "stage manifest preparation wall clock, including subsequent queue/dependency delay; individual cases also have native_timeout_seconds"
+    },
+    "native_timeout_seconds": 480
+  },
+  "resources": {
+    "status": "PROVISIONAL, not launch authorization",
+    "partition": "red",
+    "qos": "large",
+    "max_concurrent_cpus": 1000,
+    "memory_mb_per_task": 3000,
+    "fit_wall_minutes": 10,
+    "finalize_wall_minutes": 5,
+    "native_wall_minutes": 20,
+    "report_wall_minutes": 20,
+    "report_cpu_hours_allowance": 1.0,
+    "budget_cpu_hours_cap": null,
+    "scheduler_probe_performed": false,
+    "throttle_reason": "Future stream arrays exceeding agreed max_concurrent_cpus must share that cap; no independent arbitrary throttle.",
+    "scheduler_limits_verified": false
+  },
+  "source_revision": {
+    "origin": "Accepted 20261016_180145 lineage pilot and concluded 20261016_190611 perspective pilot; source adapted from the isolated91-check setup.",
+    "scientifically_rerun_after_promotion": false
+  }
+}

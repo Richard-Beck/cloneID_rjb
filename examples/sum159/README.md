@@ -1,0 +1,82 @@
+# SUM-159 baseline pilot
+
+SUM-159 progressive hypoxia and normoxic controls provide a case study of the lineage-determined and perspective-guided baselines.
+The two pilot fits are complete. This checkpoint retains their selected figure/text and reusable fitting procedure; the new scripted
+fresh-fit campaign has not been scientifically executed.
+
+The prepared evidence covers 118 culture episodes, 343 microscopy acquisitions and 220 single-cell chromosome counts. Database
+preparation and laboratory-record reconstruction establish the lineage, oxygen, seeding and measurement histories. The current fresh-fit
+boundary begins with those prepared measurements and curated design; it does not repeat raw reconstruction.
+
+## Models and retained results
+
+The lineage baseline shares biology according to founding lineage: a shared fit is followed by two founder-specific parameter vectors
+coupled by ridge, held constant across arms and passages. The perspective baseline instead shares biology according to current 2N/4N
+genomic state across founders and treatments. Pre-existing mixtures change through differential division and survival without state
+transitions. These are general ways of defining identity; SUM-159, hypoxia and two genomic states belong to this example.
+
+The concluded local campaigns are:
+
+- `20261016_180145_sum159_total_count_shared_ridge`: accepted lineage candidate `ridge_0100_10` on the pooled alpha-100 path, with
+  native microscopy loss 9.2971.
+- `20261016_190611_sum159_total_count_latent_state`: displayed perspective candidate `refined_no_wgd_0p0_072`, with native microscopy
+  loss 10.7331. Its retained physical vector and fitted mixtures supply the displayed fields and trajectory.
+
+The perspective evaluation covers all 472 ordinary fields, including all 343 microscopy acquisitions with four seeds; 127/128 minority
+probes completed. A separate composition recheck shifts fractions by up to 8.27 percentage points. Microscopy was not rerun at those
+shifted mixtures, so combining its image score with the rechecked assay score gives a conditional diagnostic rather than a
+self-consistent joint score. The figure uses the matching frozen fitted mixtures. This limitation is retained with the accepted fit.
+
+| Recorded campaign | Measured CPU-hours | Allocated CPU-hours | Elapsed minutes |
+| --- | ---: | ---: | ---: |
+| Lineage | 34.0 | 70.1 | about 40 |
+| Perspective | 128.4 | 197.4 | about 31 |
+
+These are the recorded pilot scheduler scopes, including their recorded attempts. Local preparation and reporting are outside those
+totals. They demonstrate pilot resource use, not the as-yet unmeasured runtime of the complete scripted fresh-fit campaign.
+
+The [figure](../../docs/u01_calibration_draft/latest/baseline_multipanel.png),
+[calibration text](../../docs/u01_calibration_draft/latest/calibration.md) and
+[figure source notes](../../docs/u01_calibration_draft/latest/README.md) describe the selected results. The compact figure illustrates
+lineage/assay evidence, compute use, clonal trajectories, six cost components and matched fields. Representative crops cover 25% of each
+displayed field; fitted count/spatial statistics use full fields. Rebuilding it requires the named local pilot outputs and the private
+prepared display/provenance assets specified by its builder.
+
+## Plan a fresh fit
+
+[baseline.json](baseline.json) configures the new runner; the
+[modelling procedure](../../.codex/skills/physicell-modeling/references/prepared-baselines.md) documents its selection and stopping rules.
+Fresh shared and ridge lineage fits precede the perspective search. Perspective parents are competitive shared fits from that same new
+run, rather than historical fitted vectors or the founder-ridge winner.
+
+Use an existing Python environment with numpy, scipy, numba, pandas, scikit-image, matplotlib and plotly. Provide the local prepared-data
+directory and compatible lineage/perspective engine executables through configuration or `BASELINES_PREPARED_DATA`,
+`BASELINES_LINEAGE_ENGINE` and `BASELINES_PERSPECTIVE_ENGINE`. Configuration-relative paths resolve from this example directory; local
+output locations can be set with `BASELINES_OUTPUT_ROOT` and `BASELINES_SCRATCH_ROOT`. No prepared measurements or engine binaries are
+bundled in Git. Raw imaging access, if separately requested, must use `CELLSEGMENTATIONS_ROOT`.
+
+The prepared directory contains `observations.csv`, `observations.npz`, `field_measurements.csv`, `metadata.json`, `episodes.json`,
+`assays.json`, `lineage_edges.csv`, `schedule_all.csv` and `excluded_schedule.csv`. Preserve their identities and units. The 30-column
+observer weights total retained live + dead count at 0.5 and dead count, coverage, relative area, gap and Clark-Evans organization at
+0.1 each; the older generic 29-column observer is different.
+
+From the repository root:
+
+```bash
+# Synthetic pipeline checks, requiring no prepared measurements or engine execution:
+python scripts/run_baselines.py mock --config examples/sum159/baseline.json --output tmp/baseline_mock
+
+# Inspect the configured real-data plan after restoring local prerequisites:
+python scripts/run_baselines.py dry-run --config examples/sum159/baseline.json --output tmp/baselines/planning
+
+# Check execution readiness separately:
+python scripts/run_baselines.py preflight --config examples/sum159/baseline.json
+```
+
+The example disables scientific execution. `dry-run` writes a plan without fitting, simulation or scheduler contact; `preflight` reports
+the remaining readiness requirements. Synthetic checks validate software behavior, not scientific fit quality. A later agreed run will
+freeze inputs/configuration, execute the bounded screen/refinement/independent-validation procedure, report diagnostics and accept the
+fit for now. Further testing on an alternative lineage follows that demonstration.
+
+Full campaigns, detailed measurements and private provenance remain local. The reusable runner/configuration and selected figure/text
+are tracked; encrypted local-data snapshots are handled through the repository's [publishing workflow](../../docs/publishing.md).

@@ -1,0 +1,139 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "77f7f65cf5d0b0279ad82a0450a971e180e146ea133b2671d006658d249fac52"
+    },
+    {
+      "path": "__init__.py",
+      "sha256": "55bb341981362d7e18f1fc4b70453c439b0c308ca87cf9f1de2345d29cece1ce"
+    },
+    {
+      "path": "assets/perspective/physicell/PhysiCell_settings.xml",
+      "sha256": "85e7bb25d32b81b9aeae60996ebdb06f03425681aeb3d992f3948dc6d94ae4c8"
+    },
+    {
+      "path": "assets/perspective/physicell/main.cpp",
+      "sha256": "dfcb85370c544cdbf2496741b7613c8057e4b51155cab98fab88f3fec0f71d69"
+    },
+    {
+      "path": "assets/perspective/physicell/wgd_runtime.h",
+      "sha256": "f8be3dd146ef247ba88e67867e9f1b23228fc19b0ba47f5070b436a21f484da7"
+    },
+    {
+      "path": "contracts.json",
+      "sha256": "783caed571b9814ac8f6c97af63afd346f7883bd15d9357b346beced942151f5"
+    },
+    {
+      "path": "interfaces/accounting.csv",
+      "sha256": "1e6098bede65aa28c8ddf4a776db2ccc22af495ea30d4c4eab3a749380dcecd9"
+    },
+    {
+      "path": "interfaces/cellsegmentations_manifest.csv",
+      "sha256": "0127e96ddaccffadffc1c6285fb3e0568828864c393c3391f7d6e24911c2925e"
+    },
+    {
+      "path": "mock_validation.py",
+      "sha256": "4e5ca1c2b1a097be7e6610aa22616ebd2e37687f57d9615b219b7fabe8a3b5bc"
+    },
+    {
+      "path": "portability_checks.py",
+      "sha256": "453f3c535d1e69112b415851d6b46bf7c433ab358fee194f4bda62f8ecda0593"
+    },
+    {
+      "path": "scheduler.py",
+      "sha256": "74c1ffa6d74a9820771605c12e9c90c843846180415f51027fe9dedd7a8be778"
+    },
+    {
+      "path": "source_origins.json",
+      "sha256": "45ab904c533c94cbabca7724201d8282a41b2c95e69a6362fee4ff77dbd44721"
+    },
+    {
+      "path": "synthetic_data.py",
+      "sha256": "2dd3dd6fa37780e1deabd5e64d8b2f28c02cf4956c2d491f928a7db047f926b4"
+    },
+    {
+      "path": "terminal.py",
+      "sha256": "98bdf8c914dfecfa577f11440b35c2dd596c3086195ff65e631d06a897312518"
+    },
+    {
+      "path": "terminal_mock.py",
+      "sha256": "0abaeee26a6fe438d18c64685df078974e92dab3c62f995a51b690cae79f3595"
+    },
+    {
+      "path": "vendor/assets/physicell/PhysiCell_settings.xml",
+      "sha256": "85e7bb25d32b81b9aeae60996ebdb06f03425681aeb3d992f3948dc6d94ae4c8"
+    },
+    {
+      "path": "vendor/assets/physicell/baseline_runtime.cpp",
+      "sha256": "43542067c00a5caea11bf16536d7be6d0c6bc349696dae9182a29d54e0737667"
+    },
+    {
+      "path": "vendor/core/__init__.py",
+      "sha256": "bc9586bef59a45ff466f7d06cc92687e3902074e835ca49955424507145d764c"
+    },
+    {
+      "path": "vendor/core/assumptions.py",
+      "sha256": "54a04dfc8780ea65b9c74ef1992fb701c7f3b3d9a82485e126732b4dac390b97"
+    },
+    {
+      "path": "vendor/core/colony.py",
+      "sha256": "822dc717d86e79708fbbf6bf98b155506d6ddad2b1e226f254ee1c96d6b66df1"
+    },
+    {
+      "path": "vendor/core/fields.py",
+      "sha256": "d54ddcabf8a12e22dc4f599b34afe95321abc36f3023530a65ffbd388f3135c9"
+    },
+    {
+      "path": "vendor/core/fitting.py",
+      "sha256": "3ca76b8fe971d5a6b0edfe8df1e2edc746630f525a9cc53b3a745266a7341b56"
+    },
+    {
+      "path": "vendor/core/spatial.py",
+      "sha256": "4009309a849a28c4a5ac6c5ab1a3df4dc50bc1c502dac6fa514ae398cff666e8"
+    },
+    {
+      "path": "vendor/core/transfer.py",
+      "sha256": "96954cb7bfa0af8deb874b9e1f5e7dfc3fc32c1354e249f9a09e01d5ba0eff10"
+    },
+    {
+      "path": "vendor/lineage_model.py",
+      "sha256": "bd6c3c5d2b37db3f151313e77246c106705901fe484b13fdc584aed7f47462d8"
+    },
+    {
+      "path": "vendor/native_diagnostics.py",
+      "sha256": "55e16a7f97be414d32001631fa53a197e84b545513572bcc80c9b3496a01df0e"
+    },
+    {
+      "path": "vendor/native_refinement.py",
+      "sha256": "93f27546440746de0636ffe829551198e49d66a7a8c955902abbe55522100bff"
+    },
+    {
+      "path": "vendor/perspective_model.py",
+      "sha256": "e05241c9c49b4ec3777a9f59cfa1c3b247081dc6c1be02a7d28d73c04ca0577e"
+    },
+    {
+      "path": "vendor/perspective_search.py",
+      "sha256": "64487c5938bdcc602f494a193876ee3a4435947b1c9e0430f16e564197fa5c69"
+    },
+    {
+      "path": "vendor/wgd_colony.py",
+      "sha256": "f5c1b8737f0a63e373ffe7ddf5d49015f34f5a0978b1d57779374235f8870806"
+    },
+    {
+      "path": "vendor/wgd_transfer.py",
+      "sha256": "b128db9778ae7f04ec3ad36aedeb1a68c9b5a622d66210d3ecfca46b1dd8b6d9"
+    },
+    {
+      "path": "workflow.py",
+      "sha256": "0d619fec587e4ac3339c2deb6c4ab0a21ddaf3c3a971ce391d19c64498c1f0f8"
+    }
+  ],
+  "repository_files": [
+    {
+      "path": "scripts/run_baselines.py",
+      "sha256": "e6e6b2786d9bafdf77d944a64da4dd69dc7242c36f01ed45884ceffd5f3f1540"
+    }
+  ],
+  "scope": "Public source/assets only; runtime data/config/binary identities are frozen per run."
+}
