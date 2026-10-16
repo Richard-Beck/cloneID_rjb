@@ -35,22 +35,22 @@ legend and short axis labels. Every F group retains brightfield, segmentation, l
 four small images. Within-group gutters are 0.015 inches. Modality and F1--F4/acquisition labels are overlaid with translucent backing;
 no outside image headings consume row space. All four cases remain present.
 
-The figure is 11.5 x 7.65 inches, compared with the original 18 x 24 inches: 79.6% less figure area. The complete-field alternative remains in the isolated development folder; it is not duplicated here.
+The figure is 11.5 x 7.25 inches, compared with the original 18 x 24 inches: 80.7% less figure area. The complete-field alternative remains in the isolated development folder; it is not duplicated here.
 
 ## Panel choices
 
-- A highlights 2N O1 A18 in gold and links it to E and F2. F1--F4 and molecular sampling proxies remain visible.
+- A highlights 2N hypoxia 1 A18 in gold and links it to E and F2. F1--F4 and molecular sampling proxies remain visible.
 - B pools all 220 chromosome counts into a histogram with bins two chromosomes wide. The existing nonWGD/WGD clusters retain blue/pink
   colors; measurement-source labels are removed.
 - C shows actual used/allocated CPU-hours separately for the concluded lineage campaign (34.0/70.1) and perspective campaign
   (128.4/197.4), with approximately 40 and 31 minutes elapsed, respectively. These are full recorded scheduler scopes; local work is
   outside those totals. No hypothetical PhysiCell-only projection is shown.
-- D removes normoxia trajectories and normoxia-specific observations. O1/O2 use the same dark ink with solid/dashed lines, and the lineage
+- D removes normoxia trajectories and normoxia-specific observations. Hypoxia 1/hypoxia 2 use the same dark ink with solid/dashed lines, and the lineage
   reference is dotted. Molecular observations and frozen fitted proxies have distinct marker shapes. The perspective trajectory uses
   the final frozen physical vector and correction, matching the frozen mixtures used to initialize native fields.
 - E illustrates the six cost components using one accepted lineage-defined example: total/dead count, coverage, relative area, gap and
   organization. Coefficients are 0.5 for total count and 0.1 for each other term. The gold acquisition-time marker links directly to F2.
-- F2 is framed in gold, preserving the passage/snapshot link. Every F image uses a 700 x 550-pixel window from a 1400 x 1100-pixel field:
+- F2 brightfield, segmentation and lineage simulation have separate inset gold frames linking them to E. The perspective simulation is unframed. Every F image uses a 700 x 550-pixel window from a 1400 x 1100-pixel field:
   exactly 25% of its area. Brightfield and segmentation share one registered window. Independent native realizations may use separate
   windows representative of their own full fields. Cropped panels retain identical scale with 100-pixel bars; the full-field alternative
   has 200-pixel bars.
@@ -136,7 +136,7 @@ archive preservation is checked separately at promotion. It also verifies the pe
 sample times, checkpoint hashes and full-field total/dead counts in all displayed snapshots. Rendered previews were inspected visually.
 This figure revision does not edit the grant source; shared workflow guidance is maintained separately.
 
-## Spacing-only revision
+## Spacing revisions
 
 The approved text, caption, crop selections, model choices and plotted data are unchanged. A's axis starts at 0.42 inches from the top
 (previously 0.75); B--D axes start at 2.64 inches (previously 3.85), with 0.21 inches between their panel letters and axes. C and D are
@@ -148,4 +148,14 @@ previous approved builder. Crop evidence is exactly equal. Normal rebuilding req
 reference inputs; no historical revision archive is opened solely for a preservation check. Separate promotion manifests retain the
 local archive-integrity audit.
 
-The preceding latest is preserved locally in `docs/u01_calibration_draft/revisions/revision_08/`; earlier local archives remain intact. Revision archives and private `.local/` evidence/reference inputs are excluded from the Git checkpoint. Normal rebuilding requires the named local pilot artifacts and `.local/reference_inputs/`, but no historical archive.
+The follow-up reduces E's axis-to-axis horizontal gap from the rightmost D facet from 1.42 to 0.72 inches (E shifts left 0.70 inches).
+F moves upward 0.40 inches without changing image dimensions: its first row begins at 4.84 rather than 5.24 inches. The vertical gap
+from the B--D axis bottoms to F image tops falls from 1.15 to 0.75 inches, with C's elapsed annotation brought closer to its axis.
+E's five facets are packed to keep their labels readable above F. Height is now 7.25 inches, another 5.2% reduction from 7.65.
+
+Internal branch IDs remain O1/O2; only displayed names change to hypoxia 1/hypoxia 2. Chemical oxygen notation (% O2) is unchanged.
+Gold frames identify the observed field, its segmentation and the lineage snapshot associated with the single-model illustration in E;
+the perspective snapshot is not highlighted. `.local/gap_label_verification.json` verifies the plotted numerical arrays and image pixels
+against the incumbent, excluding only the requested decorative-frame changes. Crop selection is exactly unchanged.
+
+The preceding latest is preserved locally in `docs/u01_calibration_draft/revisions/revision_09/`; earlier local archives remain intact. Revision archives and private `.local/` evidence/reference inputs are excluded from the Git checkpoint. Normal rebuilding requires the named local pilot artifacts and `.local/reference_inputs/`, but no historical archive.

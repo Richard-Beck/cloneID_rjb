@@ -54,6 +54,7 @@ PALETTE = np.array([[0, 0, 0], [56, 189, 248], [244, 114, 182],
                     [213, 94, 0], [0, 158, 115]], np.uint8)
 OXYGEN = ["#e63946", "#f77f00", "#e5ba00", "#6bbd43", "#00a6a6",
           "#2389da", "#4655c6", "#a239c8"]
+DISPLAY_ARMS = {"O1": "hypoxia 1", "O2": "hypoxia 2"}
 DEPENDENCIES = {}
 CHECKS = {}
 NATIVE = {}
@@ -378,7 +379,7 @@ def plot_lineage(ax, obs, fields, perspective):
     for group, base in [("2N", 4.1), ("4N", .25)]:
         ax.text(-2.8, base, group, fontsize=8, fontweight="bold", va="center")
         for arm, dy in [("control", 1), ("O1", 0), ("O2", -1)]:
-            ax.text(24.7, base+dy, arm, va="center", fontsize=6.4)
+            ax.text(24.7, base+dy, DISPLAY_ARMS.get(arm, arm), va="center", fontsize=6.4)
     ax.set_xlim(-3.2, 26.4)
     ax.set_ylim(-1.1, 5.65)
     ax.set_xticks([0, 6, 12, 18, 24], ["founder", "6", "12", "18", "24"])
@@ -467,10 +468,10 @@ def cost_data(lineage, obs):
 def plot_cost_example(fig, data):
     # The cost example is the narrow right-hand column spanning both upper rows.
     # Counts and coverage plus three CDFs illustrate six components in five facets.
-    layouts = [("Total / dead count", .58, .70), ("Coverage", 1.69, .35),
-               ("Relative cell area", 2.40, .45), ("Background gap", 3.21, .45),
-               ("Organization", 4.02, .45)]
-    aa = [axes(fig, 9.68, top, 1.18, height) for _, top, height in layouts]
+    layouts = [("Total / dead count", .58, .65), ("Coverage", 1.63, .30),
+               ("Relative cell area", 2.27, .36), ("Background gap", 3.00, .36),
+               ("Organization", 3.73, .36)]
+    aa = [axes(fig, 8.98, top, 1.18, height) for _, top, height in layouts]
     count, coverage, area, gap, organization = aa
     row, rows, counts = data["row"], data["rows"], data["counts"]
     count.plot(rows.time_days, counts[:, 0], color=GRAY, lw=1.0, ls="--")
@@ -526,11 +527,11 @@ def plot_cost_example(fig, data):
         ax.set_gid("E_cost_facet")
     legend = fig.legend(handles=[Line2D([], [], color=INK, lw=1, marker="o", ms=2.2, label="Observed"),
                                  Line2D([], [], color=GRAY, lw=1, ls="--", label="PhysiCell")],
-                        bbox_to_anchor=(9.32/11.5, 1-.32/fig.get_size_inches()[1]),
+                        bbox_to_anchor=(8.62/11.5, 1-.32/fig.get_size_inches()[1]),
                         loc="upper left", frameon=False, ncol=2, fontsize=5.8,
                         handlelength=1.1, columnspacing=.5, handletextpad=.3, borderpad=0)
     legend.set_gid("E_common_legend")
-    text(fig, 9.15, 4.86, "Weights: total 0.5; others 0.1.", fontsize=5.9)
+    text(fig, 8.45, 4.48, "Weights: total 0.5; others 0.1.", fontsize=5.9)
     count.set_ylabel("Total / dead\ncells per field", fontsize=6.1)
     coverage.set_ylabel("Coverage", fontsize=6.1)
     area.set_ylabel("Area CDF", fontsize=6.1)
@@ -557,7 +558,9 @@ def image_panel(ax, array, crop=True, saved_bar=False, highlight=False, crop_rec
         ax.text(xend-bar/2, ypos-h*.035, f"{bar} px", color="white", ha="center", va="bottom",
                 fontsize=4.6, bbox=dict(facecolor="black", edgecolor="none", alpha=.65, pad=.5))
     if highlight:
-        ax.add_patch(Rectangle((0, 0), w, h, fill=False, edgecolor=HIGHLIGHT, lw=2.2, clip_on=False))
+        frame = Rectangle((3, 3), w-6, h-6, fill=False, edgecolor=HIGHLIGHT, lw=1.6)
+        frame.set_gid("cost_example_frame")
+        ax.add_patch(frame)
 
 
 def plot_compute(ax, lineage, perspective):
@@ -578,7 +581,7 @@ def plot_compute(ax, lineage, perspective):
                        Rectangle((0, 0), 1, 1, facecolor="white", edgecolor=GRAY, hatch="///", label="Allocated")],
               fontsize=5.3, loc="upper left", frameon=False, handlelength=.8, handletextpad=.35, borderpad=.1)
     clean(ax)
-    ax.text(.5, -.39, f"Elapsed: {usage['Serial wall minutes from first submit to last finish']:.0f} / {p['elapsed_wall_minutes']:.0f} min",
+    ax.text(.5, -.25, f"Elapsed: {usage['Serial wall minutes from first submit to last finish']:.0f} / {p['elapsed_wall_minutes']:.0f} min",
             transform=ax.transAxes, ha="center", fontsize=5.8)
     CHECKS["compute_scope"] = "Separate full recorded SLURM scopes of the two concluded named campaigns; no hypothetical projection"
     dump(LOCAL / "compute.json", dict(lineage=usage, perspective=p,
@@ -644,8 +647,8 @@ def plot_fractions(aa, perspective):
         clean(ax)
     aa[0].set_ylabel("Alive nonWGD fraction")
     aa[1].tick_params(labelleft=False)
-    aa[0].legend(handles=[Line2D([], [], color=INK, ls="-", lw=1, label="O1"),
-                         Line2D([], [], color=INK, ls="--", lw=1, label="O2"),
+    aa[0].legend(handles=[Line2D([], [], color=INK, ls="-", lw=1, label=DISPLAY_ARMS["O1"]),
+                         Line2D([], [], color=INK, ls="--", lw=1, label=DISPLAY_ARMS["O2"]),
                          Line2D([], [], color=GRAY, ls=":", lw=1, label="Lineage")],
                  fontsize=6, loc="lower left", frameon=False, handlelength=1.8, borderpad=.1)
     aa[1].legend(handles=[Line2D([], [], color=INK, ls="", marker="o", ms=3, label="Observed"),
@@ -708,11 +711,12 @@ def plot_fields(fig, fields, lineage, perspective, compact):
     for i, field in enumerate(fields):
         row, case = field["row"], field["case"]
         # Four case groups form a 2x2 grid; each keeps all four modalities.
-        ytop = 5.24+(i//2)*1.045
+        ytop = 4.84+(i//2)*1.045
         x0 = .58+(i % 2)*5.37
         width, gap = 1.28, .015
         h = width*550/700
         short = row.episode_id.replace("SUM-159_NLS_", "").replace("_seed", "").replace("_", " ")
+        short = " ".join(DISPLAY_ARMS.get(token, token) for token in short.split())
         hours = int(np.floor(row.time_days*24+.5))
         day, hour = divmod(hours, 24)
         arrays = list(field["observed_panels"])
@@ -725,7 +729,7 @@ def plot_fields(fig, fields, lineage, perspective, compact):
             ax = axes(fig, x0+k*(width+gap), ytop, width, h)
             ax.set_gid("F_image")
             image_panel(ax, arr, crop=compact, saved_bar=k < 2,
-                         highlight=int(row.row) == CONFIG["cost_example"]["row"],
+                         highlight=int(row.row) == CONFIG["cost_example"]["row"] and k < 3,
                          crop_rect=field["display_windows"][k] if compact else None)
             modality = ax.text(.035, .04, name, transform=ax.transAxes, ha="left", va="bottom",
                      color="white", fontsize=5.1,
@@ -749,16 +753,16 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
     heading(fig, .35, 2.43, "B", "")
     heading(fig, 2.93, 2.43, "C", "")
     heading(fig, 4.80, 2.43, "D", "")
-    heading(fig, 9.33, .14, "E", "")
+    heading(fig, 8.63, .14, "E", "")
     plot_lineage(axes(fig, .65, .42, 7.25, 1.65), obs, fields, perspective)
     plot_histogram(axes(fig, .65, 2.64, 1.90, 1.45), perspective)
     plot_cost_example(fig, cost)
     plot_compute(axes(fig, 3.13, 2.64, 1.15, 1.45), lineage, perspective)
     plot_fractions([axes(fig, x, 2.64, 1.42, 1.45) for x in [5.10, 6.84]], perspective)
-    heading(fig, .35, 5.03, "F", "")
+    heading(fig, .35, 4.63, "F", "")
     legends = [(ALIVE, "Mask: alive"), (DEAD, "Dead"), (LOW, "Model: nonWGD"), (HIGH, "Model: WGD")]
     fig.legend(handles=[Rectangle((0, 0), 1, 1, color=c, label=name) for c, name in legends],
-               loc="upper right", bbox_to_anchor=(.955, 1-5.00/size[1]), ncol=4, fontsize=6.3,
+               loc="upper right", bbox_to_anchor=(.955, 1-4.61/size[1]), ncol=4, fontsize=6.3,
                frameon=False, handlelength=1, columnspacing=1.1, borderpad=.1)
     evidence = plot_fields(fig, fields, lineage, perspective, compact)
     foot_top = size[1]-.25
@@ -770,6 +774,9 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
     overlays = [(a, t) for a in image_axes for t in a.texts
                 if t.get_gid() in ["F_case_overlay", "F_modality_overlay"]]
     assert len(image_axes) == 16 and len(overlays) == 20
+    frames = [(a, p) for a in image_axes for p in a.patches if p.get_gid() == "cost_example_frame"]
+    assert len(frames) == 3
+    assert [next(t.get_text() for t in a.texts if t.get_gid() == "F_modality_overlay") for a, _ in frames] == ["Brightfield", "Segmentation", "Lineage"]
     assert all(t.get_window_extent(renderer).xmin >= a.get_window_extent(renderer).xmin
                and t.get_window_extent(renderer).xmax <= a.get_window_extent(renderer).xmax
                and t.get_window_extent(renderer).ymin >= a.get_window_extent(renderer).ymin
@@ -785,6 +792,8 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
                   separate_snapshot_strip_removed=True, matched_cases=4,
                   matched_case_grid=[2, 2], modalities_per_case=4,
                   matched_image_rows=2, matched_image_columns=8, descriptive_panel_titles=False,
+                  highlighted_cost_modalities=["Brightfield", "Segmentation", "Lineage"],
+                  perspective_snapshot_highlighted=False, display_branch_names=DISPLAY_ARMS,
                   panel_mapping=dict(A="Lineage", B="Chromosome histogram", C="Compute",
                                      D="Hypoxia trajectories", E="Cost example", F="Matched fields"))
     stem = CONFIG.get("output_stem", "current") if compact else "alternative_full_fields"
@@ -846,11 +855,11 @@ def main():
                   lineage_candidate=CONFIG["lineage"]["candidate"],
                   perspective_candidate=CONFIG["perspective"]["candidate"],
                   lineage_replicates=2,
-                  expected_figure_pixels=[2760, 1836],
+                  expected_figure_pixels=[2760, 1740],
                   approved_area_square_inches=432,
                   compact_area_square_inches=float(np.prod(CONFIG["figure_size_inches"])),
                   compact_area_reduction_fraction=1-float(np.prod(CONFIG["figure_size_inches"]))/432)
-    assert Image.open(OUT / f"{CONFIG.get('output_stem', 'current')}.png").size == (2760, 1836)
+    assert Image.open(OUT / f"{CONFIG.get('output_stem', 'current')}.png").size == (2760, 1740)
     dump(LOCAL / "verification.json", CHECKS)
     dump(LOCAL / "fields.json", dict(observed=observed_evidence, compact=compact, full=full,
                                      cost_example=cost["native_info"]))

@@ -11,7 +11,7 @@ CURRENT LATEST (2026-10-16): latest/preview.html and latest/baseline_multipanel.
 show the compact A--F figure rebuilt from the concluded October 16 lineage and
 perspective pilots. SUM-159 hypoxia is the pilot for two reusable baseline definitions.
 
-The figure measures 11.5 x 7.65 inches. Panel F retains all four acquisitions and
+The figure measures 11.5 x 7.25 inches. Panel F retains all four acquisitions and
 modalities in a 2x2 group layout, with labels inside the images. Quarter-field
 windows are selected against each field's own full-field summaries. Full-field
 fit statistics remain unchanged.
@@ -21,7 +21,7 @@ preview.html, source notes, build_figure.py, crop_selection.py, config.json and
 Git-ignored local provenance. Rebuild from the project root:
   conda run -n cpose python docs/u01_calibration_draft/latest/build_figure.py
 
-The actual preceding latest was preserved intact in revisions/revision_08/.
+The actual preceding latest was preserved intact in revisions/revision_09/.
 The earlier local revisions, including revision_06 and revision_07, remain intact.
 Revision archives and private local evidence are excluded from the Git checkpoint;
 normal rebuilding does not require historical revision archives.
