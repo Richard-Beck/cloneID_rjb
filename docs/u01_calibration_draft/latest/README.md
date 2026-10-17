@@ -205,4 +205,23 @@ indices is an explicit local rebuild dependency; normal figure rebuilding does n
 The figure footer is removed. Numerical validation limitations and the complete-field/crop distinction remain in this text and caption.
 Internal compatibility keys retain their original spelling; all rendered genomic-state names are 2N/4N.
 
-The preceding latest is preserved locally in `docs/u01_calibration_draft/revisions/revision_10/`; earlier local archives remain intact. Revision archives and private `.local/` evidence/reference inputs are excluded from the Git checkpoint. Normal rebuilding requires the named local pilot artifacts, `.local/reference_inputs/` and the saved projection accounting snapshot, but no historical archive.
+The preceding latest is preserved locally in `docs/u01_calibration_draft/revisions/revision_11/`; earlier local archives remain intact. Revision archives and private `.local/` evidence/reference inputs are excluded from the Git checkpoint. Normal rebuilding requires the named local pilot artifacts, `.local/reference_inputs/` and the saved projection accounting snapshot, but no historical archive.
+
+## Label and caption refinement
+
+The displayed models are named **Lineage-guided** and **Perspective guided**, including the CPU ticks, trajectory reference and image
+labels. C is 0.30 inches wider within the existing upper-row gap, with tighter unused x-axis margins, so the full names remain readable; overall figure dimensions and all
+other panel/image positions are unchanged. D uses circles for every molecular observation, retaining its measured values and Wilson
+intervals. Open fitted-proxy markers and their legend entry are removed; fitted lines and their numerical evidence remain unchanged.
+The main caption uses concise inference wording. Detailed fixed-call projection assumptions, mixture/inheritance semantics and validation
+limits remain in these source notes and local provenance.
+
+Hypoxia 1 and hypoxia 2 name the two separately propagated O1/O2 branches from each 2N/4N founder. The prepared episode mapping shows
+matching passage oxygen sequences (2%, 1%, 0.5%, 0.3%, 0.2%, 0.1%, then 0%) within each founder. The local instance note
+`lab_records/instance_protocol_db/instances/sum159-hypoxia-ltee.md` does not establish a further distinction between the branch names.
+The caption therefore does not imply different treatments/setpoints or a stronger experimental-replication claim. The source note and
+prepared episode hashes and branch checks are recorded in `.local/hypoxia_branch_definition.json`.
+
+Displayed quarter-field snapshots retain their registered observed crop and independently representative native windows. Model blue/pink
+colors retain founding 2N/4N identity in Lineage-guided and current 2N/4N state in Perspective guided. Removing these technical details from
+the main caption does not change their numerical or source interpretation. No incomplete scratch output is used in this revision.

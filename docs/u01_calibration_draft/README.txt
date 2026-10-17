@@ -21,7 +21,7 @@ preview.html, source notes, build_figure.py, crop_selection.py, config.json and
 Git-ignored local provenance. Rebuild from the project root:
   conda run -n cpose python docs/u01_calibration_draft/latest/build_figure.py
 
-The actual preceding latest was preserved intact in revisions/revision_10/.
+The actual preceding latest was preserved intact in revisions/revision_11/.
 The earlier local revisions, including revision_06 and revision_07, remain intact.
 Revision archives and private local evidence are excluded from the Git checkpoint;
 normal rebuilding does not require historical revision archives.

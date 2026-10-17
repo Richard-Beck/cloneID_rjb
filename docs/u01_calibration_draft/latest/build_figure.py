@@ -573,10 +573,10 @@ def plot_compute(ax, lineage, perspective):
         ax.bar(i, u, width=.43, color="#536977", edgecolor="white", lw=.4)
         ax.text(i, a*1.08, f"{a/1000:.0f}k", ha="center", va="bottom", fontsize=5.6)
         ax.text(i, u/1.12, f"{u:.0f}", ha="center", va="top", fontsize=5.5, color="white")
-    ax.set(yscale="log", ylim=(10, max(estimated)*5), xlim=(-.65, 1.65), xticks=[0, 1], xticklabels=["Lineage", "Persp."], ylabel="CPU-hours (log)")
+    ax.set(yscale="log", ylim=(10, max(estimated)*5), xlim=(-.4, 1.4), xticks=[0, 1], xticklabels=["Lineage-guided", "Perspective guided"], ylabel="CPU-hours (log)")
     ax.set_yticks([10, 100, 1000, 10000, 100000], ["10", "100", "1k", "10k", "100k"])
     ax.minorticks_off()
-    ax.tick_params(axis="x", labelsize=5.8)
+    ax.tick_params(axis="x", labelsize=5.3)
     ax.legend(handles=[Rectangle((0, 0), 1, 1, color="#536977", label="Used"),
                        Rectangle((0, 0), 1, 1, facecolor="white", edgecolor=GRAY, hatch="///", label="PC-only est.")],
               fontsize=5.3, loc="upper left", frameon=False, handlelength=.8, handletextpad=.35, borderpad=.1)
@@ -634,9 +634,8 @@ def plot_fractions(aa, perspective):
             half = z*np.sqrt(high*(1-high)/n+z*z/(4*n*n))/(1+z*z/n)
             lo, hi = max(0, center-half), min(1, center+half)
             ax.errorbar(x, high, yerr=[[max(0, high-lo)], [max(0, hi-high)]],
-                        fmt="^" if arm == "O2" else "o", color=INK, capsize=1.5, ms=2.6, lw=.65)
+                        fmt="o", color=INK, capsize=1.5, ms=2.6, lw=.65)
             fitted_high = assay["frozen_fraction"]
-            ax.scatter(x, fitted_high, marker="D", s=13, facecolor="white", edgecolor=INK, lw=.65, zorder=5)
             exports.append(dict(founder=founder, assay=assay["assay_id"], arm=arm, passage=x,
                                 observed_4N=high, predicted_4N=fitted_high, n=n))
         ax.set(xlim=(-.8, 24.7), ylim=(-.05, 1.05), xticks=[0, 6, 12, 18, 24],
@@ -648,15 +647,15 @@ def plot_fractions(aa, perspective):
     aa[1].tick_params(labelleft=False)
     aa[0].legend(handles=[Line2D([], [], color=INK, ls="-", lw=1, label=DISPLAY_ARMS["O1"]),
                          Line2D([], [], color=INK, ls="--", lw=1, label=DISPLAY_ARMS["O2"]),
-                         Line2D([], [], color=GRAY, ls=":", lw=1, label="Lineage")],
+                         Line2D([], [], color=GRAY, ls=":", lw=1, label="Lineage-guided")],
                  fontsize=6, loc="upper left", bbox_to_anchor=(0, .86), frameon=False, handlelength=1.8, borderpad=.1)
-    aa[1].legend(handles=[Line2D([], [], color=INK, ls="", marker="o", ms=3, label="Observed"),
-                         Line2D([], [], color=INK, ls="", marker="D", ms=3,
-                                markerfacecolor="white", label="Frozen fit")],
+    aa[1].legend(handles=[Line2D([], [], color=INK, ls="", marker="o", ms=3, label="Observed")],
                  fontsize=6, loc="lower left", frameon=False, handlelength=1, borderpad=.1)
     pd.DataFrame(exports).to_csv(LOCAL / "hypoxia_assays.csv", index=False)
     CHECKS["fraction_plot_excludes_normoxia"] = True
     CHECKS["fraction_trajectories_monochrome"] = True
+    CHECKS["fraction_observation_marker"] = "o"
+    CHECKS["fraction_frozen_fit_markers_shown"] = False
     CHECKS["fraction_display_state"] = "Living 4N; direct high-state trajectory and Wilson intervals"
     CHECKS["fraction_trajectory_source"] = "Final-validation frozen cohort latent_i arrays with frozen correction, verified against exact report BLUE curves"
     CHECKS["fraction_passage_coordinate"] = "Episode A(p): p-1+t/duration; assays mark preceding parent harvest; common-root harvest is zero"
@@ -706,7 +705,7 @@ def select_display_crops(fields, lineage, perspective):
 
 
 def plot_fields(fig, fields, lineage, perspective, compact):
-    colnames = ["Brightfield", "Segmentation", "Lineage", "Perspective"]
+    colnames = ["Brightfield", "Segmentation", "Lineage-guided", "Perspective guided"]
     evidence = []
     for i, field in enumerate(fields):
         row, case = field["row"], field["case"]
@@ -757,7 +756,7 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
     plot_lineage(axes(fig, .65, .42, 7.25, 1.65), obs, fields, perspective)
     plot_histogram(axes(fig, .65, 2.64, 1.90, 1.45), perspective)
     plot_cost_example(fig, cost)
-    plot_compute(axes(fig, 3.13, 2.64, 1.15, 1.45), lineage, perspective)
+    plot_compute(axes(fig, 3.13, 2.64, 1.45, 1.45), lineage, perspective)
     plot_fractions([axes(fig, x, 2.64, 1.42, 1.45) for x in [5.10, 6.84]], perspective)
     heading(fig, .35, 4.63, "F", "")
     legends = [(ALIVE, "Mask: alive"), (DEAD, "Dead"), (LOW, "Model: 2N"), (HIGH, "Model: 4N")]
@@ -767,13 +766,17 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
     evidence = plot_fields(fig, fields, lineage, perspective, compact)
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
+    compute_axis = next(a for a in fig.axes if a.get_ylabel() == "CPU-hours (log)")
+    compute_labels = [t.get_window_extent(renderer) for t in compute_axis.get_xticklabels()]
+    assert compute_labels[0].xmax < compute_labels[1].xmin
+    CHECKS["full_model_cpu_labels_separated"] = True
     image_axes = [a for a in fig.axes if a.get_gid() == "F_image"]
     overlays = [(a, t) for a in image_axes for t in a.texts
                 if t.get_gid() in ["F_case_overlay", "F_modality_overlay"]]
     assert len(image_axes) == 16 and len(overlays) == 20
     frames = [(a, p) for a in image_axes for p in a.patches if p.get_gid() == "cost_example_frame"]
     assert len(frames) == 3
-    assert [next(t.get_text() for t in a.texts if t.get_gid() == "F_modality_overlay") for a, _ in frames] == ["Brightfield", "Segmentation", "Lineage"]
+    assert [next(t.get_text() for t in a.texts if t.get_gid() == "F_modality_overlay") for a, _ in frames] == ["Brightfield", "Segmentation", "Lineage-guided"]
     assert all(t.get_window_extent(renderer).xmin >= a.get_window_extent(renderer).xmin
                and t.get_window_extent(renderer).xmax <= a.get_window_extent(renderer).xmax
                and t.get_window_extent(renderer).ymin >= a.get_window_extent(renderer).ymin
@@ -790,9 +793,10 @@ def render(lineage, perspective, obs, fields, cost, compact=True):
                   separate_snapshot_strip_removed=True, matched_cases=4,
                   matched_case_grid=[2, 2], modalities_per_case=4,
                   matched_image_rows=2, matched_image_columns=8, descriptive_panel_titles=False,
-                  highlighted_cost_modalities=["Brightfield", "Segmentation", "Lineage"],
+                  highlighted_cost_modalities=["Brightfield", "Segmentation", "Lineage-guided"],
                   perspective_snapshot_highlighted=False, display_branch_names=DISPLAY_ARMS,
                   user_facing_state_labels=["2N", "4N"], footer_removed=True,
+                  display_model_labels=["Lineage-guided", "Perspective guided"],
                   panel_mapping=dict(A="Lineage", B="Chromosome histogram", C="Compute",
                                      D="Hypoxia trajectories", E="Cost example", F="Matched fields"))
     stem = CONFIG.get("output_stem", "current") if compact else "alternative_full_fields"
