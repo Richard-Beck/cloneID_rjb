@@ -59,5 +59,6 @@ The reusable fresh-fit runner has synthetic checks and a recorded scientific att
 lineage fitting and stopped because an initialization rule required two competitive shared parents. The selected lineage fit was
 weaker than the accepted pilot. The revised runner removes that quality gate and widens the search to 512 shared starts, 500
 founder-specific starts, 1,000 perspective starts and eight bounded refinement starts per eligible source, under one 1,000-CPU cap.
-The new scratch run is being prepared. Complete fresh-workflow fit quality remains to be demonstrated; the [example](../examples/sum159/README.md) records the stopped attempt and its resource use.
+Replacement run `20261017_152845_sum159_baseline_scratch` passed compute-node preflight and is running. The first attempt's full
+outputs were erased at the user's request; its published summary remains historical evidence. Complete fresh-workflow fit quality remains to be demonstrated; the [example](../examples/sum159/README.md) records the stopped attempt and its resource use.
 Testing on an alternative lineage remains subsequent work.

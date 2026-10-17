@@ -9,7 +9,8 @@ derived measurements, the live laboratory-record knowledge base, full analysis r
 
 **Checkpoint status:** both pilots are complete and the [figure and calibration text](docs/u01_calibration_draft/latest/calibration.md)
 use those results. The first fresh attempt stopped at a restrictive parent-selection rule. The revised runner treats parent scarcity
-and incomplete native evidence as reported limitations, increases parallel search breadth, and is being prepared for a new scratch run. See the [SUM-159 example](examples/sum159/README.md) for the outcome and the
+and incomplete native evidence as reported limitations and increases parallel search breadth. Replacement scratch run
+`20261017_152845_sum159_baseline_scratch` is running after compute-node preflight; its fit quality remains under evaluation. See the [SUM-159 example](examples/sum159/README.md) for the outcome and the
 [workflow](docs/workflow.md) for the fitting boundary and procedure.
 
 <!-- baseline-calibration:start -->

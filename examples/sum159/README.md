@@ -67,8 +67,8 @@ by distributing each task's measured CPU time across its elapsed interval; insta
 removes scheduler resource waiting and dependency polling while preserving the original cap, measured task durations, scientific
 dependencies, serial stages and long tails. It preserves failed work and does not invent the unrun stages.
 
-The stopped run will be erased before the authorized restart. Its published accounting summary and figure are retained as historical
-evidence; detailed run products are not backed up. For a retained run, the same plotting command reads saved accounting without fitting,
+The stopped run was erased before the authorized restart. Its published accounting summary and figure are retained as historical
+evidence; detailed run products were not backed up. For a retained run, the same plotting command reads saved accounting without fitting,
 simulation or scheduler contact:
 
 ```bash
@@ -89,7 +89,10 @@ and eight 100-second local refinement starts per eligible source. Native simulat
 parallel as their prerequisites finish, sharing one 1,000-CPU cap. Long 0% oxygen cases receive scheduling priority. Brief input checks
 and reporting retain small allocations. Aggregate stage deadlines are disabled so queue waiting cannot exhaust scientific work;
 individual engine timeouts remain. Planning estimates are about 513 CPU-hours and 68–85 minutes before external queue delays, including
-additional refinement breadth; these are estimates, not a CPU-hour or wall-time cap. The new scratch run is being prepared.
+additional refinement breadth; these are estimates, not a CPU-hour or wall-time cap. Replacement run
+`20261017_152845_sum159_baseline_scratch` passed compute-node preflight and launched on 2026-10-17. All 512 fresh shared-fit workers
+started; the full 19-job, 35,394-slot campaign is submitted. Scientific results remain pending. Its source, prepared inputs, engine
+identities, selection rules and configuration are frozen in that local run.
 
 Poor fits, missing native cases and scarce screen/finalist pools produce a result with explicit limitations rather than stopping solely
 on quality or coverage. Fully supported scores rank ahead of partial evidence, and partial losses are compared only on matching support.
