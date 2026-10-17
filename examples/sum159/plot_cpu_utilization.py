@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 
 
 TERMINAL = {
@@ -130,6 +131,46 @@ def expanded_rows(rows, exclusions):
                        SourceArrayRangeRawJobID=row.get("JobIDRaw", ""))
 
 
+def task_contexts(node):
+    """Resolve logical slots once, including sparse native groups and score DAGs."""
+    contexts = {}
+    for group in node["manifest_value"]["task_groups"]:
+        sparse = group.get("indices")
+        indices = list(sparse) if sparse is not None else list(range(group["first"], group["last"] + 1))
+        trajectories = group.get("trajectory_indices")
+        if trajectories is not None and len(trajectories) != len(indices):
+            raise ValueError("Sparse trajectory mapping has the wrong length: " + node["name"])
+        if trajectories is not None and (len(set(trajectories)) != len(trajectories) or
+                                          any(type(value) is not int or value < 0 for value in trajectories)):
+            raise ValueError("Sparse trajectory mapping is not a unique nonnegative index list: " + node["name"])
+        parents = list(group.get("parents", []))
+        if group.get("parent") is not None:
+            parents.append(group["parent"])
+        parents = list(dict.fromkeys(parents))
+        if any(type(parent) is not int or not 0 <= parent < node["tasks"] for parent in parents):
+            raise ValueError("Parent index outside the frozen node: " + node["name"])
+        for position, index in enumerate(indices):
+            if type(index) is not int or not 0 <= index < node["tasks"]:
+                raise ValueError("Logical index outside the frozen node: " + node["name"])
+            if index in contexts:
+                raise ValueError("Overlapping frozen task groups: " + node["name"] + "_" + str(index))
+            if index in parents:
+                raise ValueError("Task depends on itself: " + node["name"] + "_" + str(index))
+            context = {"phase": group["phase"], "parent_index": group.get("parent"),
+                       "parent_indices": parents.copy(),
+                       "candidate_index": group.get("candidate") if group.get("candidate") is not None else index,
+                       "trajectory_index": ((trajectories[position] if trajectories is not None else position)
+                                            if group["phase"] == "simulate" else None)}
+            if group.get("source_candidate_index") is not None:
+                context["source_candidate_index"] = group["source_candidate_index"]
+                if node["name"] == "perspective_bounded_refinement":
+                    context["refinement_replicate"] = position
+            contexts[index] = context
+    if set(contexts) != set(range(node["tasks"])):
+        raise ValueError("Frozen task groups leave uncovered logical slots: " + node["name"])
+    return contexts
+
+
 def normalize(run, raw_path, ancillary_jobs):
     plan = read_json(run / "scheduler/plan.json")
     jobs = read_json(run / "scheduler/jobs.json")
@@ -138,16 +179,15 @@ def normalize(run, raw_path, ancillary_jobs):
     for node in plan["nodes"]:
         keys = []
         job = str(jobs[node["name"]])
-        manifest = node["manifest_value"]
+        contexts = task_contexts(node)
         for index in range(node["tasks"]):
             key = job + ("_" + str(index) if node["tasks"] > 1 else "")
-            group = next(g for g in manifest["task_groups"] if g["first"] <= index <= g["last"])
-            phase = node["name"] + ("." + group["phase"] if node["kind"] == "stream" else "")
+            context = contexts[index]
+            phase = node["name"] + ("." + context["phase"] if node["kind"] == "stream" else "")
             expected[key] = {
                 "key": key, "node": node["name"], "index": index, "phase": phase,
-                "category": category(phase), "parent_index": group["parent"],
-                "candidate_index": group["candidate"] if group["candidate"] is not None else index,
-                "trajectory_index": index - group["first"] if group["phase"] == "simulate" else None,
+                "node_reserved_tasks": node["tasks"],
+                "category": category(phase), **{field: value for field, value in context.items() if field != "phase"},
                 "depends_on": node.get("depends_on"), "state": "NOT_ACCOUNTED",
             }
             keys.append(key)
@@ -230,7 +270,34 @@ def enrich_tasks(run, tasks):
                 task["candidate_id"] = slot["candidate_id"]
                 task["native_support_kind"] = slot["kind"]
                 native_outcome = f"perspective/{stage}/cases/{task['candidate_id']}/{task['index']:05}/outcome.json"
+        elif node == "perspective_bounded_refinement" and load("perspective/refinement_tasks.json") is not None:
+            manifest = load("perspective/refinement_tasks.json")
+            slots_by_index = cache.setdefault("refinement_slots_by_index", {slot["index"]: slot for slot in manifest})
+            if task["index"] not in slots_by_index:
+                ledger_path = "scheduler/dynamic_counts/" + node + ".json"
+                ledger = load(ledger_path)
+                if (ledger is not None and ledger.get("node") == node
+                        and ledger.get("reason") == "unused_reserved_quota_after_manifest_preparation"
+                        and type(ledger.get("active_tasks")) is int and type(ledger.get("reserved_tasks")) is int
+                        and 0 <= ledger["active_tasks"] <= task["index"] < ledger["reserved_tasks"]
+                        and ledger["reserved_tasks"] == task["node_reserved_tasks"]
+                        and ledger.get("unused_tasks") == ledger["reserved_tasks"] - ledger["active_tasks"]
+                        and task["state"] == "CANCELLED" and task.get("start") is None
+                        and not any(task.get(field, 0) for field in ["cpu_seconds", "duration_seconds", "elapsed_seconds", "cpus", "worker_cpu_seconds"])):
+                    task.update(unused_reserved_quota=True, quota_ledger_source=ledger_path)
+                    task.pop("candidate_id", None)
+                    task.pop("refinement_attempt_directory", None)
+                    continue
+                raise ValueError("Refinement worker lacks a frozen source slot: " + task["key"])
+            attempt = slots_by_index[task["index"]]
+            if task.get("source_candidate_index", attempt["source_index"]) != attempt["source_index"]:
+                raise ValueError("Refinement source index disagrees with the scheduler manifest")
+            task.update(candidate_id=attempt["source_id"], source_candidate_index=attempt["source_index"],
+                        refinement_replicate=attempt["replicate"], refinement_attempt_directory=attempt["attempt_directory"])
         else:
+            if (node == "perspective_bounded_refinement" and "source_candidate_index" in task
+                    and task.get("start") is not None):
+                raise ValueError("Started replicated refinement lacks its frozen refinement_tasks.json")
             candidate_path = {
                 "perspective_search": "perspective/candidates.json",
                 "perspective_bounded_refinement": "perspective/screen_candidates.json",
@@ -260,15 +327,71 @@ def attach_worker_usage(run, tasks):
         if len(entries) > 1:
             raise ValueError("Multiple worker attempts share a scheduler task; explicit attempt accounting is required: " + task["key"])
         if entries:
+            if task.get("unused_reserved_quota"):
+                raise ValueError("Unused reserved slot has a worker execution record: " + task["key"])
             path, value = entries[0]
             task.update({"worker_cpu_seconds": value["self_cpu_seconds"] + value["child_cpu_seconds"],
                          "worker_elapsed_seconds": value["elapsed_seconds"],
                          "worker_status": value["status"], "worker_usage_source": str(path.relative_to(run))})
 
 
+def scientific_status(run, tasks):
+    """Read scientific completion explicitly; task termination does not imply it."""
+    preparation = next((task for task in tasks if task["node"] == "perspective_prepare"), {})
+    searches = [task for task in tasks if task["node"] == "perspective_search" and task.get("start") is not None]
+    blocked = preparation.get("state") == "FAILED" and not searches
+    results_path = run / "report/results.json"
+    results = read_json(results_path) if results_path.exists() else {}
+    if results.get("run_id", run.name) != run.name:
+        raise ValueError("Scientific report belongs to another run")
+    complete = results.get("complete_scientific_baseline")
+    if complete is not None and type(complete) is not bool:
+        raise ValueError("Scientific completion must be an explicit boolean")
+    if blocked:
+        if complete:
+            raise ValueError("Scientific report claims completion after failed perspective preparation")
+        complete = False
+    known_calls, missing_counters = 0, 0
+    for task in searches:
+        candidate = task.get("candidate_id")
+        path = run / "perspective/candidates" / str(candidate) / "checkpoint.json.status.json"
+        if candidate and path.exists():
+            value = read_json(path).get("evaluations")
+            if type(value) is int and value >= 0:
+                known_calls += value
+                continue
+        missing_counters += 1
+    native_workers = sum(task["node"] in {"perspective_screen_native", "perspective_final_native"}
+                         and task.get("start") is not None for task in tasks)
+    acceptance = results.get("perspective", {}).get("acceptance", {})
+    return {"scientific_campaign_complete": complete,
+            "scientific_workflow_status": ("stopped_before_perspective_fitting" if blocked else
+                                           "complete" if complete is True else "not_complete" if complete is False else
+                                           "not_evaluated_by_accounting"),
+            "scientific_status_source": "report/results.json" if results_path.exists() else None,
+            "scientific_acceptance_decision": acceptance.get("decision"),
+            "scientific_validation_status": acceptance.get("validation_status"),
+            "perspective_search_workers_started": len(searches),
+            "perspective_optimizer_started": True if known_calls else None if missing_counters else False,
+            "perspective_recorded_optimizer_calls": known_calls,
+            "perspective_started_searches_without_counters": missing_counters,
+            "perspective_native_workers_started": native_workers,
+            # A scheduler-started worker can fail a guard before launching an
+            # engine. Only a zero worker count establishes zero native calls.
+            "perspective_native_simulations_started": 0 if not native_workers else None}
+
+
 def export_objectives(run, out, all_tasks):
     calls = []
+    refinement_paths = set()
     for task in all_tasks:
+        if task.get("unused_reserved_quota"):
+            calls.append({"phase": task["phase"], "job_id": task["key"], "candidate_id": None,
+                          "source_candidate_index": task.get("source_candidate_index"),
+                          "refinement_replicate": task.get("refinement_replicate"), "attempt_directory": None,
+                          "objective_calls": 0, "state": task["state"],
+                          "call_count_source": task["quota_ledger_source"], "count_status": "unused_reserved_quota"})
+            continue
         candidate = task.get("candidate_id")
         if not candidate:
             continue
@@ -279,7 +402,14 @@ def export_objectives(run, out, all_tasks):
         elif phase == "perspective_search":
             path = run / "perspective/candidates" / candidate / "checkpoint.json.status.json"
         elif phase == "perspective_bounded_refinement":
-            path = run / "perspective/refinement" / candidate / "final.json"
+            directory = ((run / "perspective" / task["refinement_attempt_directory"]).resolve()
+                         if task.get("refinement_attempt_directory") else run / "perspective/refinement" / candidate)
+            if not directory.resolve().is_relative_to((run / "perspective").resolve()):
+                raise ValueError("Refinement attempt directory escapes the frozen run")
+            if directory.resolve() in refinement_paths:
+                raise ValueError("Multiple refinement slots share one objective-counter directory")
+            refinement_paths.add(directory.resolve())
+            path = directory / "final.json"
             if not path.exists():
                 path = path.with_name("outcome.json")
         else:
@@ -288,11 +418,15 @@ def export_objectives(run, out, all_tasks):
             final = read_json(path)
         count = final.get("evaluations") if final else None
         calls.append({"phase": phase, "job_id": task["key"], "candidate_id": candidate,
+                      "source_candidate_index": task.get("source_candidate_index"),
+                      "refinement_replicate": task.get("refinement_replicate"),
+                      "attempt_directory": task.get("refinement_attempt_directory"),
                       "objective_calls": count, "state": task["state"],
                       "call_count_source": str(path.relative_to(run)) if path.exists() else None,
                       "count_status": "recorded" if count is not None else final.get("status", "not_recorded") if final else "not_recorded"})
     write_csv(out / "objective_calls.csv", calls,
-              ["phase", "job_id", "candidate_id", "objective_calls", "state", "call_count_source", "count_status"])
+              ["phase", "job_id", "candidate_id", "source_candidate_index", "refinement_replicate", "attempt_directory",
+               "objective_calls", "state", "call_count_source", "count_status"])
     grouped = collections.defaultdict(list)
     for task in all_tasks:
         if task.get("native_support_kind"):
@@ -329,15 +463,15 @@ def make_graph(tasks, plan, node_keys):
         for key in members:
             task = by_key[key]
             deps = [upstream] if upstream else []
-            if task["parent_index"] is not None:
-                parent = str(key.split("_")[0]) + "_" + str(task["parent_index"])
+            for parent_index in task.get("parent_indices", [task["parent_index"]] if task.get("parent_index") is not None else []):
+                parent = str(key.split("_")[0]) + "_" + str(parent_index)
                 if parent not in complete:
                     raise ValueError("Completed child lacks terminal parent: " + key)
                 deps.append(parent)
             delay = max(0., (task.get("submit") or 0.) - upstream_end) if upstream_end else 0.
             graph[key] = {
                 "duration": task.get("duration_seconds", 0.), "cpus": task.get("cpus", 0),
-                "dependencies": deps, "release_delay": delay,
+                "dependencies": list(dict.fromkeys(deps)), "release_delay": delay,
                 # Preserve observed dispatch order, without sorting by duration.
                 "priority": (rank, task.get("start") if task.get("start") is not None else math.inf, task["index"]),
             }
@@ -494,9 +628,13 @@ def write_report(out, summary):
         f"{qualification['engine_failed']:,} failed attempts. " if qualification else
         "A complete wrapper status does not establish finite observation support. ")
     lines = ["# CPU utilization for the scratch attempt", "",
-             ("The attempt stopped before perspective fitting. The fixed requirement for two competitive new shared-lineage parents was not met. "
-              "No perspective optimization or validation simulation ran. Accounting is complete; the two-baseline scientific workflow is incomplete."
-              if stopped else "This report accounts for realized tasks; accounting completeness alone does not establish scientific completion."), "",
+             ("The attempt stopped before perspective fitting. No perspective optimization or validation simulation ran. "
+              "The two-baseline scientific workflow is incomplete."
+              if stopped else "The saved scientific report marks the baseline complete. This report independently accounts for realized tasks."
+              if summary["scientific_campaign_complete"] is True else
+              "The saved scientific report marks the baseline incomplete. Accounting completeness is a separate result."
+              if summary["scientific_campaign_complete"] is False else
+              "This report accounts for realized tasks; accounting completeness alone does not establish scientific completion."), "",
              f"Measured campaign CPU use was {summary['measured_cpu_hours']:.6f} CPU-hours. The separate runtime-transfer preflight consumed "
              f"{summary['ancillary_preflight_cpu_hours']:.6f} CPU-hours, giving {total:.6f} CPU-hours including preflight.", "",
              f"| Timing view | Elapsed minutes | Mean busy cores | Mean share of {summary['cpu_cap']:,}-CPU capacity |",
@@ -512,16 +650,18 @@ def write_report(out, summary):
               "| Logical task slots | Count |", "| --- | ---: |"]
     lines += [f"| {state} | {count:,} |" for state, count in summary["task_states"].items()]
     lines += [f"| Total | {summary['tasks']:,} |", "",
-              f"All {summary['never_started_tasks']:,} never-started cancelled slots have zero recorded CPU. "
-              f"Worker resource records cover all {summary['tasks_with_worker_usage']:,} started attempts. Native wrapper outcome statuses are recorded "
+              f"There are {summary['never_started_tasks']:,} never-started slots. "
+              f"Worker resource records cover {summary['tasks_with_worker_usage']:,} of {summary['started_tasks']:,} started attempts. Native wrapper outcome statuses are recorded "
               f"separately from scheduler statuses: {summary['lineage_native_outcomes'].get('complete', 0):,} complete-status "
               f"and {summary['lineage_native_outcomes'].get('failed', 0):,} failed-status outcomes across "
               f"{sum(summary['lineage_native_outcomes'].values()):,} lineage attempts. " + qualification_text +
-              "Failed and nonfinite work costs remain included. The downstream failed analysis/eligibility "
-              "workers did not execute perspective searches or simulations.", "",
+              "Failed and nonfinite work costs remain included. " +
+              ("The downstream failed analysis/eligibility workers did not execute perspective searches or simulations." if stopped else
+               "Scientific completion is taken from the saved scientific report, separately from scheduler states."), "",
               f"Worker self plus completed-child CPU totals {summary['worker_cpu_hours_crosscheck']:.6f} CPU-hours. "
-              "Official scheduler CPU totals additionally cover interpreter/dispatcher startup. The terminal report job's final cost is included "
-              "in this independent post-completion collection.", "",
+              "Official scheduler CPU totals additionally cover interpreter/dispatcher startup. " +
+              ("The terminal report job's final cost is included in this independent post-completion collection." if summary["accounting_complete"] else
+               "This partial accounting snapshot excludes nonterminal tasks."), "",
               "[CPU figure](cpu_utilization.png) · [PDF](cpu_utilization.pdf) · " +
               ("[method](METHOD.md) · " if (out / "METHOD.md").exists() else "") + "[summary](summary.json) · "
               "[task accounting](tasks.csv) · [phase costs](phases.csv) · [coverage](coverage.json)", "",
@@ -558,7 +698,136 @@ def self_test():
         raise AssertionError("Nonzero range CPU was multiplied")
     except ValueError:
         pass
-    print("Replay checks passed: dependencies, CPU cap, barriers, intrinsic delay, CPU conservation and zero-cost terminal-array expansion.")
+    sparse_fixture_test()
+    print("Replay checks passed: legacy/sparse slots, multi-parent scores, source/replicate counters, scientific status, CPU cap/conservation and terminal-array expansion.")
+
+
+def sparse_fixture_test():
+    """Exercise parsing/accounting with only synthetic saved files, no scheduler."""
+    groups = [
+        {"first": 0, "last": 0, "phase": "fit", "candidate": 0, "parent": None},
+        {"first": 1, "last": 1, "phase": "fit", "candidate": 1, "parent": None},
+        {"first": 2, "last": 2, "phase": "finalize", "candidate": 0, "parent": 0},
+        {"first": 3, "last": 3, "phase": "finalize", "candidate": 1, "parent": 1},
+        {"first": 6, "last": 8, "indices": [6, 8], "trajectory_indices": [1, 0], "phase": "simulate", "candidate": 0, "parent": 2},
+        {"first": 7, "last": 9, "indices": [7, 9], "trajectory_indices": [0, 1], "phase": "simulate", "candidate": 1, "parent": 3},
+        {"first": 4, "last": 4, "phase": "score", "candidate": 0, "parent": None, "parents": [6, 8]},
+        {"first": 5, "last": 5, "phase": "score", "candidate": 1, "parent": None, "parents": [7, 9]},
+    ]
+    stream = {"name": "lineage_shared_stream", "kind": "stream", "tasks": 10, "depends_on": None,
+              "manifest_value": {"task_groups": groups}}
+    contexts = task_contexts(stream)
+    assert contexts[7]["candidate_index"] == 1
+    assert contexts[6]["trajectory_index"] == 1 and contexts[8]["trajectory_index"] == 0
+    assert contexts[4]["parent_indices"] == [6, 8]
+    legacy = {"name": "legacy", "kind": "command", "tasks": 3,
+              "manifest_value": {"task_groups": [{"first": 0, "last": 2, "phase": "command", "candidate": None, "parent": None}]}}
+    assert [value["candidate_index"] for value in task_contexts(legacy).values()] == [0, 1, 2]
+    for mutation in ["overlap", "missing", "trajectory_length"]:
+        bad = json.loads(json.dumps(stream))
+        target = bad["manifest_value"]["task_groups"][4]
+        if mutation == "overlap":
+            target["indices"] = [6, 7]
+        elif mutation == "missing":
+            target["indices"] = [6]
+            target["trajectory_indices"] = [1]
+        else:
+            target["trajectory_indices"] = [1]
+        try:
+            task_contexts(bad)
+            raise AssertionError("Invalid sparse groups accepted: " + mutation)
+        except ValueError:
+            pass
+    with tempfile.TemporaryDirectory(prefix="baseline_cpu_fixture_") as directory:
+        run = Path(directory)
+        (run / "scheduler").mkdir()
+        (run / "perspective").mkdir()
+        (run / "report").mkdir()
+        refinement = {"name": "perspective_bounded_refinement", "kind": "command", "tasks": 4,
+                      "depends_on": "lineage_shared_stream", "manifest_value": {"task_groups": [
+                          {"first": 0, "last": 1, "phase": "command", "candidate": None, "parent": None, "source_candidate_index": 0},
+                          {"first": 2, "last": 3, "phase": "command", "candidate": None, "parent": None, "source_candidate_index": 1}]}}
+        report = {"name": "report_accept_for_now", "kind": "command", "tasks": 1,
+                  "depends_on": "perspective_bounded_refinement", "manifest_value": {"task_groups": [
+                      {"first": 0, "last": 0, "phase": "command", "candidate": None, "parent": None}]}}
+        plan = {"nodes": [stream, refinement, report]}
+        write_json(run / "scheduler/plan.json", plan)
+        write_json(run / "scheduler/jobs.json", {stream["name"]: "1000", refinement["name"]: "2000", report["name"]: "3000"})
+        slots = [{"index": index, "source_index": index // 2, "source_id": "source_" + str(index // 2),
+                  "replicate": index % 2, "attempt_directory": f"refinement/source_{index // 2}/replicate_{index % 2:03}"}
+                 for index in range(4)]
+        write_json(run / "perspective/refinement_tasks.json", slots)
+        for slot, count in zip(slots, [2, 3, 5, 7]):
+            attempt = run / "perspective" / slot["attempt_directory"]
+            attempt.mkdir(parents=True)
+            write_json(attempt / "final.json", {"evaluations": count})
+        times = [(0, 2), (0, 5), (2, 3), (5, 6), (7, 8), (9, 10), (3, 7), (6, 9), (3, 5), (6, 7)]
+        entries = [(f"1000_{index}", start, end) for index, (start, end) in enumerate(times)]
+        entries += [(f"2000_{index}", 10 if index < 3 else 12, 12 if index < 3 else 14) for index in range(4)]
+        entries.append(("3000", 14, 15))
+        raw = run / "accounting.psv"
+        with raw.open("w", newline="") as output:
+            fields = ["JobID", "JobIDRaw", "State", "AllocCPUS", "ElapsedRaw", "TotalCPU", "Submit", "Eligible", "Start", "End", "ExitCode"]
+            writer = csv.DictWriter(output, fieldnames=fields, delimiter="|")
+            writer.writeheader()
+            for key, start, end in entries:
+                iso = lambda seconds: f"2026-01-01T00:00:{seconds:02}"
+                writer.writerow({"JobID": key, "JobIDRaw": key, "State": "COMPLETED", "AllocCPUS": 1,
+                                 "ElapsedRaw": end - start, "TotalCPU": f"00:00:{(end-start)*.5:06.3f}",
+                                 "Submit": iso(0), "Eligible": iso(start), "Start": iso(start), "End": iso(end), "ExitCode": "0:0"})
+        tasks, saved_plan, node_keys, coverage = normalize(run, raw, set())
+        assert coverage["expected_tasks"] == coverage["accounted_task_rows"] == 15
+        assert not coverage["nonterminal_tasks"] and not coverage["unmapped_job_ids"]
+        graph = make_graph(tasks, saved_plan, node_keys)
+        assert set(graph["1000_4"]["dependencies"]) == {"1000_6", "1000_8"}
+        adjusted = replay(graph, 2)
+        assert adjusted["1000_4"][0] >= max(adjusted[key][1] for key in ["1000_6", "1000_8"])
+        assert adjusted["2000_0"][0] >= max(adjusted[key][1] for key in ["1000_4", "1000_5"])
+        actual = {task["key"]: (task["start"] - tasks[0]["start"], task["end"] - tasks[0]["start"]) for task in tasks}
+        for timing in [actual, adjusted]:
+            rows, zero = curve(tasks, timing)
+            assert abs(integrate(rows, "estimated_busy_cpus") + zero - sum(task["cpu_seconds"] for task in tasks)) < 1e-9
+        rows, _ = curve(tasks, adjusted)
+        assert max(row["concurrent_task_cpus"] for row in rows) <= 2
+        enrich_tasks(run, tasks)
+        export_objectives(run, run / "report", tasks)
+        calls = list(csv.DictReader((run / "report/objective_calls.csv").open()))
+        assert len(calls) == 4 and sum(int(row["objective_calls"]) for row in calls) == 17
+        assert len({row["call_count_source"] for row in calls}) == 4
+        assert {row["refinement_replicate"] for row in calls} == {"0", "1"}
+        write_json(run / "report/results.json", {"run_id": run.name, "complete_scientific_baseline": False})
+        assert scientific_status(run, tasks)["scientific_campaign_complete"] is False
+        write_json(run / "report/results.json", {"run_id": run.name, "complete_scientific_baseline": True})
+        assert scientific_status(run, tasks)["scientific_campaign_complete"] is True
+        slots[1]["attempt_directory"] = slots[0]["attempt_directory"]
+        write_json(run / "perspective/refinement_tasks.json", slots)
+        enrich_tasks(run, tasks)
+        try:
+            export_objectives(run, run / "report", tasks)
+            raise AssertionError("Shared multistart counter directory was counted repeatedly")
+        except ValueError:
+            pass
+        slots[1]["attempt_directory"] = "refinement/source_0/replicate_001"
+        write_json(run / "perspective/refinement_tasks.json", slots[:2])
+        (run / "scheduler/dynamic_counts").mkdir()
+        write_json(run / "scheduler/dynamic_counts/perspective_bounded_refinement.json",
+                   {"node": "perspective_bounded_refinement", "active_tasks": 2, "reserved_tasks": 4,
+                    "unused_tasks": 2, "reason": "unused_reserved_quota_after_manifest_preparation"})
+        unused = [task for task in tasks if task["node"] == "perspective_bounded_refinement" and task["index"] >= 2]
+        for task in unused:
+            task.update(state="CANCELLED", start=None, cpus=0, cpu_seconds=0., duration_seconds=0., elapsed_seconds=0.)
+        enrich_tasks(run, tasks)
+        assert all(task.get("unused_reserved_quota") and "refinement_attempt_directory" not in task for task in unused)
+        export_objectives(run, run / "report", tasks)
+        calls = list(csv.DictReader((run / "report/objective_calls.csv").open()))
+        zero_calls = [row for row in calls if row["count_status"] == "unused_reserved_quota"]
+        assert len(zero_calls) == 2 and all(row["objective_calls"] == "0" and not row["attempt_directory"] for row in zero_calls)
+        unused[0].update(state="FAILED", start=0., cpus=1, cpu_seconds=.1)
+        try:
+            enrich_tasks(run, tasks)
+            raise AssertionError("Started/metered missing source slot was classified as unused quota")
+        except ValueError:
+            pass
 
 
 def main():
@@ -595,9 +864,8 @@ def main():
     enrich_tasks(run, tasks)
     attach_worker_usage(run, tasks)
     export_objectives(run, out, tasks)
-    preparation = next((t for t in tasks if t["node"] == "perspective_prepare"), {})
-    perspective_started = any(t["node"] == "perspective_search" and t.get("start") is not None for t in tasks)
-    blocked = preparation.get("state") == "FAILED" and not perspective_started
+    scientific = scientific_status(run, tasks)
+    blocked = scientific["scientific_workflow_status"] == "stopped_before_perspective_fitting"
     if blocked:
         # These descendants may have executed only imports/error reporting after
         # the failed prerequisite. Their scheduler phase names are not proof that
@@ -619,11 +887,10 @@ def main():
     summary = {
         "complete": not coverage["nonterminal_tasks"], "run_id": run.name, "cpu_cap": cap,
         "accounting_complete": not coverage["nonterminal_tasks"],
-        "scientific_campaign_complete": False if blocked else None,
-        "scientific_workflow_status": "stopped_before_perspective_fitting" if blocked else "not_evaluated_by_accounting",
-        "perspective_optimizer_started": perspective_started,
-        "perspective_native_simulations_started": sum(t["node"] in {"perspective_screen_native", "perspective_final_native"} and t.get("start") is not None for t in tasks),
+        **scientific,
         "never_started_tasks": sum(t.get("start") is None for t in tasks),
+        "started_tasks": sum(t.get("start") is not None for t in tasks),
+        "unused_refinement_reserved_quota_tasks": sum(bool(t.get("unused_reserved_quota")) for t in tasks),
         "tasks": len(tasks), "task_states": dict(collections.Counter(t["state"] for t in tasks)),
         "actual_start_utc": dt.datetime.fromtimestamp(start, dt.timezone.utc).isoformat(),
         "actual_elapsed_seconds": max(end for _, end in actual.values()),

@@ -27,13 +27,16 @@ observation mapping, candidate-selection rules and resource envelope for the run
 evaluates the resulting fields and supplies native diagnostics.
 
 The [SUM-159 configuration](../examples/sum159/baseline.json) scripts fresh shared lineage fits followed by founder-specific ridge fits.
-The perspective search starts from competitive shared lineage fits produced by that same new run. Historical fitted vectors,
+The perspective search prefers competitive shared lineage fits produced by that same new run. Parent scarcity falls back to other
+valid current-run fits, with the evidence basis recorded; it does not terminate the campaign. Historical fitted vectors,
 optimizer checkpoints and rankings are excluded from this fresh fitting boundary.
 
 The perspective procedure uses a fixed quality/diversity/anchor screen, native screening with minority probes, bounded local
 refinement, then independent validation of three finalists. The selection rules are documented in the modelling reference and encoded
 in the runner. After validation, report the diagnostics and accept the fit for now; the procedure does not automatically add another
-correction/refit/validation cycle.
+correction/refit/validation cycle. A poor fit or scarce candidate pool is a reportable outcome. Continue with fewer valid candidates or
+explicitly labelled partial evidence when necessary; keep identity, input-integrity and physical-mapping checks strict. Missing cost
+components never count as zero loss, and partial scores do not compete directly with fully supported scores.
 
 ## Report and retain
 
@@ -53,7 +56,8 @@ Both named [SUM-159 pilots](../examples/sum159/README.md) are complete. Their se
 [calibration text](u01_calibration_draft/latest/calibration.md).
 
 The reusable fresh-fit runner has synthetic checks and a recorded scientific attempt from prepared data. That attempt completed
-lineage fitting and stopped at the perspective prerequisite: only one new shared parent met the configured competitive cutoff,
-which requires two. The selected lineage fit was weaker than the accepted pilot. The complete fresh workflow and its perspective
-fit quality remain to be demonstrated; the [example](../examples/sum159/README.md) records the stopped attempt and its resource use.
+lineage fitting and stopped because an initialization rule required two competitive shared parents. The selected lineage fit was
+weaker than the accepted pilot. The revised runner removes that quality gate and widens the search to 512 shared starts, 500
+founder-specific starts, 1,000 perspective starts and eight bounded refinement starts per eligible source, under one 1,000-CPU cap.
+The new scratch run is being prepared. Complete fresh-workflow fit quality remains to be demonstrated; the [example](../examples/sum159/README.md) records the stopped attempt and its resource use.
 Testing on an alternative lineage remains subsequent work.

@@ -11,6 +11,7 @@ ROOT=HERE.parent
 sys.path.insert(0,str(HERE))
 import perspective_model as a
 import wgd_transfer as native
+import native_support as support
 from wgd_colony import simulate_two_state
 
 PY=a.PYTHON
@@ -50,21 +51,32 @@ def run(stage,index):
  out=ROOT/stage;s=read(out/'slots.json')[index];folder=out/'cases'/s['candidate_id']/f'{index:05}';folder.mkdir(parents=True,exist_ok=True)
  if (folder/'outcome.json').exists():return
  started=time.monotonic();result=dict(status='failed',slot=s)
+ fp=out/'frozen'/s['candidate_id']/'final.json';checkpoint_hash=sha(fp)
+ if checkpoint_hash!=read(out/'parameter_manifest.json')[s['candidate_id']]:raise ValueError('Native frozen parameter hash mismatch')
+ result['checkpoint_sha256']=checkpoint_hash
  try:
-  fp=out/'frozen'/s['candidate_id']/'final.json';checkpoint_hash=sha(fp);assert checkpoint_hash==read(out/'parameter_manifest.json')[s['candidate_id']]
-  final=read(fp);sp=spec(final,s);result['checkpoint_sha256']=checkpoint_hash
-  remaining=stage_remaining_seconds(stage)
+  final=read(fp);sp=spec(final,s);remaining=stage_remaining_seconds(stage)
   if remaining<5:raise RuntimeError('Relative native-stage deadline exhausted; case not started')
   result['engine_timeout_seconds']=min(TIMEOUT,remaining)
-  nativeout=native.execute(folder/'case',sp,timeout_seconds=min(TIMEOUT,remaining),measure=s['kind']=='main')
-  if nativeout['status']!='success':raise RuntimeError(nativeout.get('error','engine failed'))
-  tr=pd.read_csv(folder/'case/state_trajectory.csv');assert int(tr.wgd_events.max())==0
-  result.update(status='complete',native=nativeout,initial_counts=tr.iloc[0].to_dict(),harvest_counts=tr.iloc[-1].to_dict())
-  if s['kind']=='main':
-   z=np.load(folder/'case/observables.npz');rows=a.Data().rows.iloc[s['observation_rows']];lookup=np.argmin(abs(z['times_minutes'][:,None]-rows.time_days.to_numpy()[None,:]*1440),axis=0)
-   assert np.max(abs(z['times_minutes'][lookup]-rows.time_days.to_numpy()*1440),initial=0)<.500001
-   np.savez_compressed(folder/'observables.npz',indices=s['observation_rows'],predicted=z['predicted'][lookup],trajectory_predicted=z['predicted'],times_minutes=z['times_minutes'])
- except Exception as e:result.update(error=repr(e),traceback=traceback.format_exc())
+  nativeout=native.execute(folder/'case',sp,timeout_seconds=min(TIMEOUT,remaining),measure=s['kind']=='main');result['native']=nativeout
+  if nativeout.get('error'):result['error']=nativeout['error']
+  trajectory=None
+  try:
+   trajectory=native.read_trajectory(folder/'case/state_trajectory.csv')
+   if int(trajectory.wgd_events.max())!=0:raise ValueError('Forbidden state-transition events in native case')
+   result.update(initial_counts=trajectory.iloc[0].to_dict(),last_available_counts=trajectory.iloc[-1].to_dict(),last_available_time_minutes=float(trajectory.time_minutes.iloc[-1]))
+   if nativeout.get('requested_terminal_time_available'):result['harvest_counts']=trajectory.iloc[-1].to_dict()
+  except (OSError,ValueError,pd.errors.ParserError) as error:
+   if 'Forbidden state-transition' in str(error):raise
+   result['trajectory_error']=repr(error);trajectory=None
+  if s['kind']=='main' and (folder/'case/observables.npz').exists():
+   with np.load(folder/'case/observables.npz') as z:
+    rows=a.Data().rows.iloc[s['observation_rows']];requested=rows.time_days.to_numpy()*1440;times=z['times_minutes'];values=z['predicted'];available=z['requested_time_support'] if 'requested_time_support' in z else np.isfinite(values).all(axis=1)
+    lookup=np.argmin(abs(times[:,None]-requested[None,:]),axis=0);matched=(abs(times[lookup]-requested)<.500001)&available[lookup]
+    np.savez_compressed(folder/'observables.npz',indices=np.asarray(s['observation_rows'])[matched],predicted=values[lookup[matched]],trajectory_predicted=values,times_minutes=times,requested_indices=s['observation_rows'],requested_time_support=available)
+    result.update(requested_observations=len(requested),measured_observations=int(matched.sum()))
+  result['status']='complete' if nativeout['status']=='success' else 'partial' if result.get('measured_observations',0)>0 or trajectory is not None else 'failed'
+ except Exception as error:result.update(error=repr(error),traceback=traceback.format_exc())
  result['wall_seconds']=time.monotonic()-started;write(folder/'outcome.json',result);print(index,s['candidate_id'],s['kind'],result['status'],result['wall_seconds'],flush=True)
 
 def response(data,nat,o,f,horizon):
@@ -84,39 +96,90 @@ def nb_modes(n,h,logg,t,weights,prior,kappa=1.,precision=.25):
  rate=(lo+hi)/2;p=expit(lm[None,:]+rate[:,None]*t[None,:]-lr[None,:]);curv=(weights*t[None,:]**2*(h+r)[None,:]*p*(1-p)).sum(axis=1)+precision
  return rate,1/curv
 
+def _microscopy_display(data,pred,seen):
+ starts={};micro={f'{g}_{arm}':[] for g in ['2N','4N'] for arm in ['C','O1','O2']}
+ for episode in data.episodes:
+  parent=episode['parent_episode_id'];starts[episode['episode_id']]=0. if parent is None else starts[parent]+episode['parent_transfer_time_days']
+ def display(value):return [np.expm1(value[0]),np.expm1(value[1]),value[2],np.exp(value[3]),value[4],*np.exp(value[[7,17,27]])]
+ for j,row in data.rows.iterrows():
+  if not seen[:,j].any():continue
+  episode=data.byid[row.episode_id];item=dict(x=starts[row.episode_id]+row.time_days,episode=row.episode_id,passage=row.passage_id,observed=display(data.obs[j]),native=[display(pp[j]) for pp in pred],replicate_seen=seen[:,j].tolist())
+  for arm in ['C','O1','O2'] if episode['arm']=='common' else [episode['arm']]:micro[f"{episode['founding_group']}_{arm}"].append(item)
+ for values in micro.values():values.sort(key=lambda row:row['x'])
+ return micro
+
+
+def _unavailable_projection(dest,c,cid,folder,final,microscopy,raw,failed,slots,data,pred,seen,reason,started):
+ summary=dict(candidate_id=cid,alpha=c['alpha'],status='partial' if microscopy['ranking_total'] is not None or raw else 'unavailable',correction_status='unavailable',correction_reason=reason,main_complete=sum(q['kind']=='main' and q['case_complete'] for q in raw),main_available=sum(q['kind']=='main' for q in raw),main_requested=sum(q['kind']=='main' for q in slots),probes_complete=sum(q['kind']=='minority_probe' and q['case_complete'] for q in raw),probes_available=sum(q['kind']=='minority_probe' for q in raw),probes_requested=sum(q['kind']=='minority_probe' for q in slots),failures=failed,native_microscopy_loss=microscopy['total'],partial_native_microscopy_loss=microscopy.get('partial_total'),ranking_native_microscopy_loss=microscopy.get('ranking_total'),ranking_basis=microscopy.get('ranking_basis'),joint_score=None,mean_assay_deviance=None,physical_parameters_unchanged=True,source_x=final['x'],checkpoint_sha256=sha(folder/'final.json'),elapsed_seconds=time.monotonic()-started)
+ write(dest/'summary.json',summary);write(dest/'report_data.json',dict(id=cid,summary=summary,microscopy_scores=microscopy,curves={},assays=[],frozen_assays=final.get('assays',[]),microscopy=_microscopy_display(data,pred,seen),selection=[]))
+ return summary
+
+
 def analyze(stage,index):
- started=time.monotonic();out=ROOT/stage;selected=read(out/'candidates.json');c=selected[index];cid=c['id'];folder=out/'frozen'/cid;final=read(folder/'final.json');nat=a.decode(final['x'],'no_wgd');data=a.Data();dest=out/'analysis'/cid;dest.mkdir(parents=True,exist_ok=True)
- slots=[s for s in read(out/'slots.json') if s['candidate_id']==cid]
- reps=read(out/'contract.json')['replicates'];pred=np.full((reps,data.n,30),np.nan);seen=np.zeros((reps,data.n),int);cases=[];raw=[];failed=[]
- for s in slots:
-  sd=out/'cases'/cid/f"{s['case_index']:05}";p=sd/'outcome.json'
-  if not p.exists():failed.append(dict(case_index=s['case_index'],reason='missing'));continue
-  result=read(p)
-  if result['status']!='complete':failed.append(dict(case_index=s['case_index'],reason=result.get('error','failed')));continue
-  tr=pd.read_csv(sd/'case/state_trajectory.csv');n=tr.iloc[0][['n_low','n_high']].to_numpy(float);h=tr.iloc[-1][['n_low','n_high']].to_numpy(float);cases.append(dict(slot=s,tr=tr,n=n))
-  raw.append(dict(candidate_id=cid,case_index=s['case_index'],kind=s['kind'],episode_id=s['episode_id'],oxygen=s['oxygen'],seed_low=n[0],seed_high=n[1],harvest_low=h[0],harvest_high=h[1],absent_seed_state=bool((n==0).any()),local_extinction=bool(((n>0)&(h==0)).any())))
-  if s['kind']=='main':
-   z=np.load(sd/'observables.npz');ix=z['indices'].astype(int);pred[s['replicate'],ix]=z['predicted'];seen[s['replicate'],ix]+=1
+ started=time.monotonic();out=ROOT/stage;selected=read(out/'candidates.json');c=selected[index];cid=c['id'];folder=out/'frozen'/cid;final=read(folder/'final.json')
+ if sha(folder/'final.json')!=read(out/'parameter_manifest.json')[cid]:raise ValueError('Native analysis frozen parameter hash mismatch')
+ nat=a.decode(final['x'],'no_wgd');data=a.Data();dest=out/'analysis'/cid;dest.mkdir(parents=True,exist_ok=True)
+ slots=[s for s in read(out/'slots.json') if s['candidate_id']==cid];reps=read(out/'contract.json')['replicates'];pred=np.full((reps,data.n,30),np.nan);seen=np.zeros((reps,data.n),int);cases=[];raw=[];failed=[]
+ for slot in slots:
+  sd=out/'cases'/cid/f"{slot['case_index']:05}";path=sd/'outcome.json'
+  if not path.exists():failed.append(dict(case_index=slot['case_index'],reason='missing'));continue
+  result=read(path)
+  if result.get('checkpoint_sha256') not in (None,sha(folder/'final.json')):raise ValueError('Native case frozen parameter hash mismatch')
+  if result.get('status')!='complete':failed.append(dict(case_index=slot['case_index'],reason=result.get('error',result.get('status','failed'))))
+  trajectory=None
+  try:
+   trajectory=native.read_trajectory(sd/'case/state_trajectory.csv')
+   if int(trajectory.wgd_events.max())!=0:raise ValueError('Forbidden state-transition events in native case')
+   if abs(float(trajectory.time_minutes.iloc[0]))>.500001:raise ValueError('Missing native initial counts')
+  except (OSError,ValueError,pd.errors.ParserError) as error:
+   failed.append(dict(case_index=slot['case_index'],reason='unavailable_or_invalid_trajectory',error=repr(error)))
+   if trajectory is not None and int(trajectory.wgd_events.max())!=0:continue
+   trajectory=None
+  if trajectory is not None:
+   n=trajectory.iloc[0][['n_low','n_high']].to_numpy(float);h=trajectory.iloc[-1][['n_low','n_high']].to_numpy(float);cases.append(dict(slot=slot,tr=trajectory,n=n))
+   raw.append(dict(candidate_id=cid,case_index=slot['case_index'],kind=slot['kind'],episode_id=slot['episode_id'],oxygen=slot['oxygen'],seed_low=n[0],seed_high=n[1],last_available_low=h[0],last_available_high=h[1],last_available_time_days=float(trajectory.time_minutes.iloc[-1]/1440),harvest_low=h[0] if result.get('status')=='complete' else None,harvest_high=h[1] if result.get('status')=='complete' else None,case_complete=result.get('status')=='complete',absent_seed_state=bool((n==0).any()),local_extinction=bool(((n>0)&(h==0)).any())))
+  if slot['kind']=='main' and (sd/'observables.npz').exists():
+   try:
+    with np.load(sd/'observables.npz') as values:
+     ix=values['indices'].astype(int);pp=values['predicted']
+     if pp.shape!=(len(ix),30) or not np.isin(ix,slot['observation_rows']).all() or len(np.unique(ix))!=len(ix):raise ValueError('Native observation support differs from frozen slot')
+     pred[slot['replicate'],ix]=pp;seen[slot['replicate'],ix]+=1
+   except (ValueError,KeyError,OSError) as error:failed.append(dict(case_index=slot['case_index'],reason='invalid_observables',error=repr(error)))
  table(dest/'native_counts.csv',raw)
- ix=np.array(sorted({int(j) for s in slots if s['kind']=='main' for j in s['observation_rows']}),int);weights=data.weights[ix].copy()
- # Rebalance screened support within founder, same episode and row hierarchy.
+ ix=np.array(sorted({int(j) for slot in slots if slot['kind']=='main' for j in slot['observation_rows']}),int);weights=data.weights[ix].copy()
  if stage=='screen':
-  for g in ['2N','4N']:
-   mask=data.rows.iloc[ix].group.to_numpy()==g
-   for j in range(6):weights[mask,j]*=.5/weights[mask,j].sum()
- parts=[]
- for pp in pred:
-  if len(ix) and np.isfinite(pp[ix]).all():parts.append(a.fitting.composite_score(pp[ix],data.obs[ix],data.scales[ix],weights,a.COEF,offset=a.B)[2].tolist())
-  else:parts.append([None]*6)
- microscopy=dict(indices=ix.tolist(),observations=len(ix),requested_observations=len(ix),completed_observations_all_replicates=int(np.sum(np.all(seen[:,ix]==1,axis=0))),replicate_components=parts,weighted_components=[float(np.mean([p[j] for p in parts])) if all(p[j] is not None for p in parts) else None for j in range(6)],required_nonfinite_values=int((~np.isfinite(pred[:,ix])).sum()),all_observations_seen_once=bool((seen[:,ix]==1).all()) if len(ix) else False)
- microscopy['total']=sum(microscopy['weighted_components']) if all(v is not None for v in microscopy['weighted_components']) else None
- if stage=='screen':
-  av=a.evaluate(data,np.array(final['x']),c['alpha'],'no_wgd',dest/'cohort_reference')
-  if av.get('valid'):
-   ap=np.load(dest/'cohort_reference'/'approximation.npz')['predicted']
-   microscopy['approximation_matched_support_loss']=a.fitting.composite_score(ap[ix],data.obs[ix],data.scales[ix],weights,a.COEF,offset=a.B)[0]
-   microscopy['native_minus_approximation_bias']=None if microscopy['total'] is None else microscopy['total']-microscopy['approximation_matched_support_loss']
+  for group in ['2N','4N']:
+   mask=data.rows.iloc[ix].group.to_numpy()==group
+   for j in range(6):
+    total=weights[mask,j].sum()
+    if total>0:weights[mask,j]*=.5/total
+ support_scores=[support.score_support(pp[ix],data.obs[ix],data.scales[ix],weights,a.COEF,a.B,a.fitting.composite_score,seen[rep,ix]) for rep,pp in enumerate(pred)]
+ usable=[q for q in support_scores if q['ranking_loss'] is not None];full=bool(support_scores) and all(q['full_loss'] is not None for q in support_scores)
+ ranking=float(np.mean([q['ranking_loss'] for q in usable])) if usable else None
+ parts=np.mean([q['weighted_components'] for q in usable],axis=0).tolist() if usable else [None]*6
+ microscopy=dict(indices=ix.tolist(),observations=len(ix),requested_observations=len(ix),completed_observations_all_replicates=int(np.sum(np.all(seen[:,ix]==1,axis=0))),replicate_components=[q['weighted_components'] if q['full_loss'] is not None else [None]*6 for q in support_scores],weighted_components=parts if full else [None]*6,partial_weighted_components=parts if not full and usable else None,required_nonfinite_values=int((~np.isfinite(pred[:,ix])).sum()),all_observations_seen_once=bool((seen[:,ix]==1).all()) if len(ix) else False,total=ranking if full else None,partial_total=ranking if not full else None,ranking_total=ranking,ranking_basis='native_full' if full else 'native_partial_normalized' if usable else 'unavailable',native_support=support_scores,supported_replicates=len(usable),requested_replicates=reps)
+ # Save native evidence before any approximation or correction diagnostic can fail.
  write(dest/'microscopy_scores.json',microscopy);np.savez_compressed(dest/'microscopy.npz',observed=data.obs,predicted=pred,weights=data.weights,scales=data.scales,seen=seen,indices=ix,screen_weights=weights)
+ if stage=='screen':
+  try:
+   av=a.evaluate(data,np.array(final['x']),c['alpha'],'no_wgd',dest/'cohort_reference')
+   if av.get('valid'):
+    with np.load(dest/'cohort_reference'/'approximation.npz') as arrays:ap=arrays['predicted']
+    matched=[support.score_support(ap[ix],data.obs[ix],data.scales[ix],weights,a.COEF,a.B,a.fitting.composite_score,mask_override=np.asarray(q['mask'],bool)) for q in support_scores if q['ranking_loss'] is not None]
+    approximation=float(np.mean([q['ranking_loss'] for q in matched])) if matched else None
+    microscopy['ranking_approximation_matched_support_loss']=approximation;microscopy['ranking_native_minus_approximation_bias']=ranking-approximation if ranking is not None and approximation is not None else None
+    if full:microscopy['approximation_matched_support_loss']=approximation;microscopy['native_minus_approximation_bias']=microscopy['ranking_native_minus_approximation_bias']
+  except (ValueError,KeyError,RuntimeError,OSError,OverflowError,FloatingPointError) as error:microscopy['approximation_comparison_error']=repr(error)
+  write(dest/'microscopy_scores.json',microscopy)
+ informative=[q for q in cases if np.all(q['n']>0) and float(q['tr'].time_minutes.iloc[-1])>0]
+ if not informative:return _unavailable_projection(dest,c,cid,folder,final,microscopy,raw,failed,slots,data,pred,seen,'No positive-time native state counts with both states present at seeding',started)
+ try:return _project_analysis(stage,index,out,c,cid,folder,final,nat,data,dest,slots,reps,pred,seen,cases,raw,failed,microscopy,started)
+ except (ValueError,KeyError,RuntimeError,OSError,OverflowError,FloatingPointError,np.linalg.LinAlgError) as error:
+  write(dest/'projection_outcome.json',dict(status='unavailable',error=repr(error),traceback=traceback.format_exc()))
+  return _unavailable_projection(dest,c,cid,folder,final,microscopy,raw,failed,slots,data,pred,seen,repr(error),started)
+
+
+def _project_analysis(stage,index,out,c,cid,folder,final,nat,data,dest,slots,reps,pred,seen,cases,raw,failed,microscopy,started):
  rng=np.random.default_rng(SEED+index+(5000 if stage!='screen' else 0));cache={};endcache={};by={p['episode_id']:i for i,p in enumerate(data.episodes)}
  olddelta=final.get('native_correction',np.zeros(len(data.episodes)))
  if isinstance(olddelta,dict):olddelta=olddelta.get('delta_per_day',np.zeros(len(data.episodes)))
@@ -151,7 +214,7 @@ def analyze(stage,index):
    n=q['n'];h=tr.iloc[j][['n_low','n_high']].to_numpy(float);f=float(n[1]/max(n.sum(),1));r=resp(q['slot']['oxygen'],f,float(tr.time_minutes.iloc[-1]/1440));g=np.log([np.interp(actual,r['t'],r['low'])/r['low'][0],np.interp(actual,r['t'],r['high'])/r['high'][0]])
    endcache[key]=dict(n=n,h=h,g=g,t=actual,case_index=si,kind=q['slot']['kind'],fraction=q['slot']['initial_high_fraction'])
   return dict(endcache[key],weight=weight)
- measurements=[];rawdelta=[];variances=[];bootraw=[];references=[];sensraw={'one_percent':[],'five_percent':[]}
+ measurements=[];rawdelta=[];variances=[];bootraw=[];references=[];informative_endpoints=0;sensraw={'one_percent':[],'five_percent':[]}
  for ei,p in enumerate(data.episodes):
   eid=p['episode_id'];f=final['seed_fractions'][eid];duration=p['duration_days'];records=[]
   rr=resp(p['oxygen'],f,max([duration]+p['needed_times_days']));references.append(rr)
@@ -174,6 +237,7 @@ def analyze(stage,index):
      e=endpoint(q,duration,1/(1+((s['initial_high_fraction']-f)/.05)**2))
      if e:records.append(e)
   if records:
+   informative_endpoints+=sum(np.all(q['n']>0) and q['t']>0 for q in records)
    n=np.array([q['n'] for q in records]);h=np.array([q['h'] for q in records]);g=np.array([q['g'] for q in records]);ts=np.array([q['t'] for q in records]);w=np.array([q['weight'] for q in records]);bw=[]
    # Main observations independent by field, probes share bootstrap across episodes.
    for q in records:bw.append(bootweights.get(q['case_index'],rng.poisson(1,BOOT)))
@@ -188,6 +252,7 @@ def analyze(stage,index):
   else:
    rawdelta.append(olddelta[ei]);variances.append(8.);bootraw.append(np.full(BOOT,olddelta[ei]));sensraw['one_percent'].append(olddelta[ei]);sensraw['five_percent'].append(olddelta[ei])
   measurements.append(dict(candidate_id=cid,episode_id=eid,episode_index=ei,founding_group=p['founding_group'],arm=p['arm'],oxygen=p['oxygen'],duration_days=duration,frozen_seed_fraction=f,main_fields=len(mains),native_records=len(records),old_correction_per_day=olddelta[ei],native_raw_correction_per_day=rawdelta[-1],raw_correction_sd=np.sqrt(variances[-1]),cohort_selection_per_day=float(np.interp(duration,rr['t'],rr['gain'])/duration)))
+ if not informative_endpoints:raise ValueError('No exact positive-time native endpoints support a two-state correction')
  n=len(data.episodes);L=np.zeros((n,n));edges=[]
  for i,p in enumerate(data.episodes):
   par=p['parent_episode_id']
@@ -207,7 +272,7 @@ def analyze(stage,index):
  if neutral:
   delta[:]=0.;db[:]=0.
   for v in ds.values():v[:]=0.
- correction=dict(exact_neutral_state_invariant=bool(neutral),episode_ids=[p['episode_id'] for p in data.episodes],delta_per_day=delta.tolist(),source_x=final['x'],source_sha256=sha(folder/'final.json'),lambda_smooth=lam,ridge=ridge,negative_binomial_kappa=1.,weak_rate_prior_sd=2.,local_zero_counts_retained=True,chromosome_assays_used=False,bootstrap_replicates=BOOT,graph_edges=edges)
+ correction=dict(status='available',native_records=sum(q['native_records'] for q in measurements),native_endpoint_episodes=sum(q['native_records']>0 for q in measurements),support_complete=not bool(failed),exact_neutral_state_invariant=bool(neutral),episode_ids=[p['episode_id'] for p in data.episodes],delta_per_day=delta.tolist(),source_x=final['x'],source_sha256=sha(folder/'final.json'),lambda_smooth=lam,ridge=ridge,negative_binomial_kappa=1.,weak_rate_prior_sd=2.,local_zero_counts_retained=True,chromosome_assays_used=False,bootstrap_replicates=BOOT,graph_edges=edges)
  write(dest/'correction.json',correction)
  if stage=='screen':
   cv=a.evaluate(data,np.array(final['x']),c['alpha'],'no_wgd',dest/'native_corrected_cohort',correction=correction)
@@ -243,7 +308,7 @@ def analyze(stage,index):
   for arm in ['C','O1','O2'] if p['arm']=='common' else [p['arm']]:micro[f"{p['founding_group']}_{arm}"].append(item)
  for values in list(curves.values())+list(micro.values()):values.sort(key=lambda r:r['x'])
  difference=float(np.mean(((np.array(final['x'])[7:20]-np.array(final['x'])[20:33])/np.log(1.5))**2));assayloss=float(np.mean([q['deviance'] for q in assays]));marginal=float(np.mean([q['bootstrap_marginal_deviance'] for q in assays]));score=None if microscopy['total'] is None else microscopy['total']+assayloss+c['alpha']*difference
- summary=dict(candidate_id=cid,alpha=c['alpha'],main_complete=sum(r['kind']=='main' for r in raw),main_requested=sum(s['kind']=='main' for s in slots),probes_complete=sum(r['kind']=='minority_probe' for r in raw),probes_requested=sum(s['kind']=='minority_probe' for s in slots),failures=failed,main_absent_seed_fields=sum(r['kind']=='main' and r['absent_seed_state'] for r in raw),main_local_harvest_extinctions=sum(r['kind']=='main' and r['local_extinction'] for r in raw),mean_assay_deviance=assayloss,mean_bootstrap_marginal_assay_deviance=marginal,native_microscopy_loss=microscopy['total'],ridge_penalty=c['alpha']*difference,joint_score=score,max_fraction_change=maxshift,max_frozen_seed_fraction_replay_error=max_frozen_seed_error,probe_one_vs_five_max_fraction_difference=max(abs(r['one_percent_fraction']-r['five_percent_fraction']) for r in trajectory),selection_mean_abs_error_per_day=float(np.mean(abs(delta-olddelta))),selection_rmse_per_day=float(np.sqrt(np.mean((delta-olddelta)**2))),physical_parameters_unchanged=True,frozen_assay_source='Exact saved adapter final.json assay predictions',frozen_curve_source='Exact recomputed adapter latent_i arrays; source physical vector and frozen correction',checkpoint_sha256=sha(folder/'final.json'),chromosome_fitted=False,finite_latent_log_states=all(np.isfinite(r['checked_log_odds']) for r in trajectory),elapsed_seconds=time.monotonic()-started)
+ summary=dict(status='complete' if not failed and microscopy['total'] is not None else 'partial',correction_status='available',correction_supported_native_records=sum(q['native_records'] for q in measurements),partial_native_microscopy_loss=microscopy.get('partial_total'),ranking_native_microscopy_loss=microscopy.get('ranking_total'),ranking_basis=microscopy.get('ranking_basis'),candidate_id=cid,alpha=c['alpha'],main_complete=sum(r['kind']=='main' and r['case_complete'] for r in raw),main_available=sum(r['kind']=='main' for r in raw),main_requested=sum(s['kind']=='main' for s in slots),probes_complete=sum(r['kind']=='minority_probe' and r['case_complete'] for r in raw),probes_available=sum(r['kind']=='minority_probe' for r in raw),probes_requested=sum(s['kind']=='minority_probe' for s in slots),failures=failed,main_absent_seed_fields=sum(r['kind']=='main' and r['absent_seed_state'] for r in raw),main_local_harvest_extinctions=sum(r['kind']=='main' and r['case_complete'] and r['local_extinction'] for r in raw),main_available_local_extinctions=sum(r['kind']=='main' and r['local_extinction'] for r in raw),mean_assay_deviance=assayloss,mean_bootstrap_marginal_assay_deviance=marginal,native_microscopy_loss=microscopy['total'],ridge_penalty=c['alpha']*difference,joint_score=score,max_fraction_change=maxshift,max_frozen_seed_fraction_replay_error=max_frozen_seed_error,probe_one_vs_five_max_fraction_difference=max((abs(r['one_percent_fraction']-r['five_percent_fraction']) for r in trajectory),default=0.),selection_mean_abs_error_per_day=float(np.mean(abs(delta-olddelta))),selection_rmse_per_day=float(np.sqrt(np.mean((delta-olddelta)**2))),physical_parameters_unchanged=True,frozen_assay_source='Exact saved adapter final.json assay predictions',frozen_curve_source='Exact recomputed adapter latent_i arrays; source physical vector and frozen correction',checkpoint_sha256=sha(folder/'final.json'),chromosome_fitted=False,finite_latent_log_states=all(np.isfinite(r['checked_log_odds']) for r in trajectory),elapsed_seconds=time.monotonic()-started)
  write(dest/'summary.json',summary);write(dest/'report_data.json',dict(id=cid,summary=summary,microscopy_scores=microscopy,curves=curves,assays=assays,microscopy=micro,selection=measurements));print(cid,clean(summary),flush=True)
 
 

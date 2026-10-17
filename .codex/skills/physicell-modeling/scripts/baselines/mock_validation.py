@@ -76,16 +76,16 @@ def main(output=None):
     check("deterministic_stratified_design",np.array_equal(w.stratified(np.log(config["lineage"]["natural_bounds"]),5,123),w.stratified(np.log(config["lineage"]["natural_bounds"]),5,123)))
     expect_failure("existing_output_refused",lambda:w.prepare(config,config_path,run.name),"exists")
     expect_failure("escaping_output_name_refused",lambda:w.prepare(config,config_path,"../escape"),"single")
-    expect_failure("missing_shared_ranking_blocks_children",lambda:w.prepare_perspective(run),"shared_score_provenance")
+    check("missing_shared_ranking_uses_explicit_fresh_design",w.current_shared_parents(run,config)[0]["ranking_basis"]=="fresh_unfitted_initial")
     def save_scores(scores):
         w.write(run/"lineage/shared_scores.json",scores)
         w.write(run/"lineage/shared_score_provenance.json",{"run_id":run.name,"scores_sha256":w.sha(run/"lineage/shared_scores.json"),"input_manifest_sha256":w.sha(run/"input_manifest.json")})
     scores=[{"status":"complete","candidate":c,"x":c["initial"],"simulator_data_loss":10.+i*.1,"approximation_data_loss":10.+i*.2,"assumption_penalty":0.,"synthetic_not_scientific":True} for i,c in enumerate(candidates[:2])]
     scores.append({"status":"failed","candidate":candidates[2],"failed_slots":[0],"synthetic_not_scientific":True})
     save_scores([scores[2]])
-    expect_failure("all_native_failures_block_children",lambda:w.prepare_perspective(run),"No complete")
+    check("all_native_failures_keep_fresh_design_available",w.current_shared_parents(run,config)[0]["ranking_basis"]=="fresh_unfitted_initial")
     save_scores(scores[:1])
-    expect_failure("one_competitive_parent_blocks_current_perspective",lambda:w.prepare_perspective(run),"at least two")
+    check("one_shared_parent_is_usable",len(w.current_shared_parents(run,config))==1)
     save_scores(scores)
     provenance=w.read(run/"lineage/shared_score_provenance.json");provenance["run_id"]="foreign_run"
     w.write(run/"lineage/shared_score_provenance.json",provenance)
@@ -122,6 +122,8 @@ def main(output=None):
     check("accounting_queue_dependency_elapsed_separated",usage["mean_eligible_to_start_queue_seconds"]==45 and usage["mean_submit_to_eligible_dependency_seconds"]==90 and usage["elapsed_first_start_to_last_end_seconds"]==150)
     import terminal_mock
     terminal_mock.run(out,stamp,check,expect_failure)
+    import robust_mock
+    robust_mock.run(out,stamp,config,check,expect_failure)
     import portability_checks
     portability_checks.run(out,check)
     check("no_scientific_modules_imported",not [name for name in sys.modules if name.startswith(("lineage_model","perspective_model","perspective_search","wgd_colony","wgd_transfer","core."))])

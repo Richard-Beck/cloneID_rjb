@@ -47,7 +47,8 @@ def fit(index):
     # Warm Numba dispatch/cache outside the requested optimizer allowance.
     warm_started=time.monotonic()
     warm=a.evaluate(data,np.asarray(c['fallback_initial']),c['alpha'],'no_wgd')
-    assert warm.get('valid'),warm
+    write(folder/'warmup.json',dict(warm,x=c['fallback_initial'],candidate=c,evaluation_basis='actual_warmup_evaluation'))
+    # A failed warmup point is not a reason to discard other valid starts.
     warm_seconds=time.monotonic()-warm_started
     started=time.monotonic();deadline=started+SECONDS;calls=0;accepted=0;tested=set();sweep=0
     traces=(folder/'trials.jsonl').open('w',buffering=1)
@@ -73,7 +74,7 @@ def fit(index):
         for attempt,x in enumerate(attempts):
             if time.monotonic()-started>45 and attempt<len(attempts)-1:continue
             out=trial(x,dict(phase='initial_screen',attempt=attempt));screening.append(dict(attempt=attempt,valid=bool(out.get('valid')),loss=out['loss']))
-            if out.get('valid') and np.isfinite(out['loss']) and out['loss']<1e24:
+            if out.get('valid') and np.isfinite(out['loss']):
                 best=out;break
         if best is None:
             write(folder/'outcome.json',dict(status='invalid_initialization',screening=screening));return
@@ -118,6 +119,9 @@ def fit(index):
         reason='error';write(folder/'error.json',dict(traceback=traceback.format_exc()))
         raise
     finally:
+        if best is None and warm.get('valid') and np.isfinite(warm.get('loss',np.inf)):
+            best=dict(warm,x=c['fallback_initial'],evaluations=calls,initialization_basis='saved_valid_warmup_after_interruption')
+            write(folder/'checkpoint.json',best)
         traces.close();moves.close()
         status=dict(candidate_id=c['id'],reason=reason,target_seconds=SECONDS,elapsed_seconds=time.monotonic()-started,evaluations=calls,accepted_moves=accepted,sweeps=sweep,active_coordinates=ACTIVE.tolist(),tested_coordinates=sorted(tested),all_active_coordinates_tested=set(ACTIVE.tolist())<=tested,warmup_seconds=warm_seconds,checkpoint_retained=best is not None,job_id=os.environ.get('SLURM_JOB_ID'),array_job_id=os.environ.get('SLURM_ARRAY_JOB_ID'),array_task_id=os.environ.get('SLURM_ARRAY_TASK_ID'),validation_submitted=False)
         write(folder/'checkpoint.json.status.json',status)

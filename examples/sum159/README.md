@@ -49,7 +49,7 @@ All 16 shared and 60 founder-specific fits ran, with 2,176 native attempts; 7 sh
 finite native scores. The alpha-100 pooled selection had native loss 11.7122, compared with 9.2971 for the accepted lineage pilot.
 Its vector was fitted at alpha 10 and selected when evaluated at alpha 100; fitting strength and pooled evaluation remain distinct.
 
-Perspective preparation requires two shared parents within 20% of the best native loss. The best scored 12.9431, giving a cutoff of
+The original perspective preparation required two shared parents within 20% of the best native loss. The best scored 12.9431, giving a cutoff of
 15.5318; the next fully supported shared candidate scored 19.6005. Only one qualified. The original procedure stopped here, without
 perspective optimization or validation. Its cutoff, starts and budget were unchanged. The complete fresh workflow remains undemonstrated,
 and the multipanel retains the accepted pilots.
@@ -67,18 +67,34 @@ by distributing each task's measured CPU time across its elapsed interval; insta
 removes scheduler resource waiting and dependency polling while preserving the original cap, measured task durations, scientific
 dependencies, serial stages and long tails. It preserves failed work and does not invent the unrun stages.
 
-Rebuild from the locally retained run and its saved accounting, without fitting, simulation or scheduler contact:
+The stopped run will be erased before the authorized restart. Its published accounting summary and figure are retained as historical
+evidence; detailed run products are not backed up. For a retained run, the same plotting command reads saved accounting without fitting,
+simulation or scheduler contact:
 
 ```bash
-python examples/sum159/plot_cpu_utilization.py --run hypothesis_tests/20261016_205952_sum159_baseline_scratch
+python examples/sum159/plot_cpu_utilization.py --run hypothesis_tests/<retained_run>
 ```
 
 ## Plan a fresh fit
 
 [baseline.json](baseline.json) configures the new runner; the
 [modelling procedure](../../.codex/skills/physicell-modeling/references/prepared-baselines.md) documents its selection and stopping rules.
-Fresh shared and ridge lineage fits precede the perspective search. Perspective parents are competitive shared fits from that same new
-run, rather than historical fitted vectors or the founder-ridge winner.
+Fresh shared and ridge lineage fits precede the perspective search. Perspective parents come from that same new run; competitive shared
+fits are preferred, with other valid current-run parents filling scarcity. A single valid parent is sufficient. Partial-native,
+approximation and fresh-design fallbacks are labelled explicitly and checked for valid embedding. Historical fitted vectors and the
+founder-ridge winner are not used as perspective parents.
+
+The restart uses 512 shared starts, 100 founder-specific starts at each of five ridge strengths, 1,000 perspective exploratory starts
+and eight 100-second local refinement starts per eligible source. Native simulations, candidate scoring and parent embedding run in
+parallel as their prerequisites finish, sharing one 1,000-CPU cap. Long 0% oxygen cases receive scheduling priority. Brief input checks
+and reporting retain small allocations. Aggregate stage deadlines are disabled so queue waiting cannot exhaust scientific work;
+individual engine timeouts remain. Planning estimates are about 513 CPU-hours and 68–85 minutes before external queue delays, including
+additional refinement breadth; these are estimates, not a CPU-hour or wall-time cap. The new scratch run is being prepared.
+
+Poor fits, missing native cases and scarce screen/finalist pools produce a result with explicit limitations rather than stopping solely
+on quality or coverage. Fully supported scores rank ahead of partial evidence, and partial losses are compared only on matching support.
+Finalists remain distinct sources. The report distinguishes terminal-fit availability, validation completeness and complete scientific
+evidence; accounting completion alone never establishes scientific completion.
 
 Use an existing Python environment with numpy, scipy, numba, pandas, scikit-image, matplotlib and plotly. Provide the local prepared-data
 directory and compatible lineage/perspective engine executables through configuration or `BASELINES_PREPARED_DATA`,

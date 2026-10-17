@@ -1,82 +1,81 @@
-# Prepared-data SUM-159 baseline pilot
+# Prepared-data baseline runner
 
-This source package promotes the scripted setup derived from the accepted `20261016_180145` lineage pilot and concluded
-`20261016_190611` perspective pilot. It preserves their model-specific numerical, scoring and selection implementation. The first
-fresh attempt completed lineage fitting and stopped before perspective fitting because only one new shared parent met the configured
-competitive cutoff, which requires two. The full fresh workflow remains unvalidated. This is a study-specific adapter for the supplied
-prepared-data schema.
+This package fits the lineage-determined and perspective-guided SUM-159 pilot baselines from prepared measurements. It retains the
+30-column total/dead observer, six loss components, shared-to-state parameter mapping and zero state transitions from the accepted
+180145/concluded 190611 development pilots. Those pilots supply source, never fitted vectors or runtime dependencies.
 
-The repository entry point is `python scripts/run_baselines.py`; its default is a dry run. The example is
-`examples/sum159/baseline.json`. `--help` uses only the standard library. The current Python runs the CLI; `paths.python: null`
-means that interpreter, while an explicit value selects the executable written into future scheduler commands. No installation
-or environment is selected silently. Synthetic checks require the existing numpy/scipy/pandas/numba/scikit-image/matplotlib
-dependencies but require no private data, compiled engine or PhysiCell checkout.
+Use the repository entry point `scripts/run_baselines.py`. Paths in JSON configuration resolve relative to that JSON file; explicit
+`BASELINES_PREPARED_DATA`, `BASELINES_OUTPUT_ROOT`, `BASELINES_SCRATCH_ROOT`, `BASELINES_LINEAGE_ENGINE`, and
+`BASELINES_PERSPECTIVE_ENGINE` environment variables override their corresponding paths. Python defaults to the current interpreter.
+The public `examples/sum159/baseline.json` keeps execution disabled. Bare help and synthetic checks need no private data or engines.
 
 ```bash
 python scripts/run_baselines.py --help
-python scripts/run_baselines.py dry-run --config examples/sum159/baseline.json
-python scripts/run_baselines.py mock --config examples/sum159/baseline.json
+python scripts/run_baselines.py mock --config examples/sum159/baseline.json --output tmp/baselines/mock
+python scripts/run_baselines.py preflight --config LOCAL_CONFIG.json --output tmp/baselines/preflight
+python scripts/run_baselines.py dry-run --config LOCAL_CONFIG.json --output tmp/baselines/planning
 ```
 
-Missing local prerequisites are reported explicitly. In the public example, scientific execution is disabled. `dry-run`,
-`preflight`, `prepare`, `scheduler-plan`, `report`, `accounting` and `mock` never submit jobs. The explicit `submit`
-command requires `execution.authorized: true`, usable local prerequisites and verified scheduler limits. Scientific workers
-require SLURM. There is no separate environment-token or repeated scientific approval flow; the example remains disabled until a run
-is authorized and its local configuration is prepared.
+Preparation, dry runs and mocks do not fit, simulate or contact SLURM. Scientific workers require explicit execution authorization,
+matching frozen source/config/input identities and a SLURM allocation. `prepare`, `scheduler-plan`, then `submit` freeze inputs and
+materialize the held dependency campaign; existing runs and attempts cannot be overwritten or automatically resubmitted.
 
-All relative `paths` values, including environment overrides, resolve from the selected configuration file's directory.
-`~` is expanded; other variables embedded in path strings are not expanded. Environment overrides are
-`BASELINES_PREPARED_DATA`, `BASELINES_OUTPUT_ROOT`, `BASELINES_SCRATCH_ROOT`, `BASELINES_LINEAGE_ENGINE` and
-`BASELINES_PERSPECTIVE_ENGINE`. `CELLSEGMENTATIONS_ROOT` applies only to an explicitly supplied optional imaging manifest.
-The example's scratch root is repository-local `tmp/baselines/`, with runs below it. Runtime output must remain under that
-configured scratch root and outside this source package. `--output` is an explicit CLI output path relative to the current
-directory, and must also be under the configured scratch root. Per-run configuration, inputs and external dependency hashes
-are frozen locally; later workers use that frozen configuration. Private inputs and binaries are never stored in this package.
+## Restart breadth and scheduling
 
-The prepared-data interface requires `observations.csv`, `observations.npz`, `field_measurements.csv`, `metadata.json`,
-`episodes.json`, `assays.json`, `lineage_edges.csv`, `schedule_all.csv` and `excluded_schedule.csv`. Example fingerprints identify
-the vetted pilot prerequisites; supply those locally or deliberately update a local configuration for a validated replacement.
-The NPZ arrays are `observed` and `scales` of shape n x30 and `weights` of shape n x6. Columns 0/1 are log1p(total retained/dead)
-counts; remaining columns are coverage, logged gap, Clark-Evans and25 pooled log relative-area quantiles. Component weights are
-0.5 total plus0.1 each for dead, coverage, relative area, gap and Clark-Evans. Episode/founder weighting and exact row/time/ancestry
-joins are checked. Frozen classified measurements are data reuse, not parameter reuse. Raw reconstruction is outside this boundary;
-any future image/mask/features work must use CellSegmentations and verified joins, without historical-root fallbacks.
+The revised pilot configuration requests 512 fresh shared starts and 500 founder-ridge starts (100 at each configured alpha), 240 seconds
+per optimizer; 1,000 perspective starts retain 300 seconds each. Fit/finalization/native/candidate-score tasks stream through one
+1,000-CPU envelope. Scoring and parent embedding run independently per candidate. Native slots at 0% oxygen are scheduled first across
+ready candidates because measured aggregate runtimes were substantially longer there; seeds, physical slots and dependencies are
+unchanged. Small preparation/reduction/report tasks retain one CPU.
 
-Fresh lineage starts with deterministic seeds precede simulator ranking and ridge initialization. Perspective starts use only that new run's
-competitive, numerically valid shared parents; at least two must lie within 20% of the best native loss. Two state13 blocks share one
-density/cluster initialization. The confirmed terminal
-procedure is top5 objective +5 diverse per alpha with two permanent shared anchors, a24-passage/two-seed native screen plus minority
-probes, eligible bounded refinement, two best supported distinct sources plus a competitive diverse third, then independent all118
-passages/four-seed validation plus probes. These counts are visible configuration. Reporting accepts the fit for now after the planned
-validation, retaining missing/failed evidence. Diagnostics do not trigger another correction, refit or native batch; no quality
-acceptance threshold is added. The co-located serial/alternating diagnostics from other work are not this campaign's procedure.
+Up to 40 candidates receive 24-passage/two-seed native screening plus minority probes. Each eligible non-anchor source has eight
+independent 100-second local refinements inside the same source-anchored bounds and frozen native correction. Replica 0 retains the
+original search path; other replicas use deterministic bounded starts. Finalists remain distinct by original source. Up to three
+vectors receive independent 118-passage/four-seed native validation plus probes. This fixed procedure ends with a saved-evidence report
+and accept-for-now when a valid terminal vector exists; it triggers no extra correction, refit or validation batch.
 
-The complete18-node held-job scheduler plan keeps each candidate's fit -> finalization -> native dependencies, failure salvage,
-stage ranking, global CPU cap and final reporting. Default pilot settings reserve9,701 task slots, including2,176 lineage and6,280
-perspective native trajectories; this task count does not imply successful scientific completion. Relative native-stage deadlines start
-when each stage manifest is prepared, including subsequent queue waiting. Scheduler accounting maps jobs through frozen task
-tables and separates measured CPU, allocated CPU, elapsed, queue and dependency time. Current-report snapshots are labeled partial.
+Measured-duration replay estimates roughly 378 lineage CPU-hours and approximately 510–515 CPU-hours including perspective/refinement.
+Estimated queue-free elapsed is roughly 68–85 minutes, with native I/O sensitivity and unsuccessful attempts included as uncertainty.
+These are planning estimates, not hard CPU-hour/elapsed caps. Native output is expected to require about 300 GB for lineage plus
+perspective outputs. Check actual filesystem space, quota/inodes, scheduler limits and environments before execution. Preserve native
+XML/MAT snapshots for matched field reporting. Every task retains wall/CPU/outcome accounting; measured and allocated time differ.
 
-## External engine prerequisites
+## Scarcity and incomplete evidence
 
-The model-specific source assets target **PhysiCell 1.14.2**. Maintain separate isolated external checkouts/builds for the two engines.
-Preserve each checkout's `core/`, `modules/`, `BioFVM/`, Makefile and license. For lineage, install
-`vendor/assets/physicell/baseline_runtime.cpp` as that checkout's `main.cpp`. For perspective, install
-`assets/perspective/physicell/main.cpp` and its adjacent runtime header at the checkout root. In each checkout, the documented build
-command is `make -j4 PhysiCell_custom_module_OBJECTS=`; the empty override avoids duplicate custom-module symbols. Keep the resulting
-executables outside this package, and supply their distinct paths through config/environment. No engine is built or executed by setup.
+Competition/diversity rules guide selection; they do not require two parents, 40 screen candidates or three finalists. Full native
+support is preferred. Partial native objectives retain actual finite measurements and report support masks, normalized retained
+weights and missing components separately from the full objective. Different partial masks are not ranked as directly comparable
+full losses: evidence mass/coverage and deterministic support groups precede within-group cost. Valid same-run approximation results
+can initialize/rank when native evidence is unavailable, explicitly labeled. A fresh current-run design point is the final initialization
+fallback and must pass an actual model evaluation. No historical fitted parameters are used.
 
-The canonical XML templates are `vendor/assets/physicell/PhysiCell_settings.xml` for lineage and
-`assets/perspective/physicell/PhysiCell_settings.xml` for perspective. Runtime exporters use these templates and generate each case's fitted XML, `cell_rules.csv`, initial-cell CSV, sample-time file and `output/` locally.
-Run-time commands invoke the configured engine with `PhysiCell_settings.xml` in that case directory. Stock PhysiCell, or the maintained
-skill's older generic29-column observer/engine, is not a replacement for these retained-total/dead model sources. Exact source bytes
-and fingerprints are recorded in `source_manifest.json`; external compiled binary identities are frozen per run.
+One valid parent can seed all starts; valid outside-window parents can supply diversity. Scarce/empty stages freeze honest manifests
+and continue to useful later work. Unused reserved slots are canceled before running and recorded as unused quota, not successful
+simulations. Failed engines/timeouts retain exact available snapshots; unobserved requested times stay missing. Valid interrupted
+checkpoints can be finalized without reevaluation. Refinement skips unavailable corrections and preserves source vectors when local
+search fails. Integrity, bounds, foreign-source hashes and genuinely invalid/nonfinite models remain errors or unavailable evidence.
 
-Compute-node Python/library compatibility, actual scheduler array/job limits, native transfer and the numerical shared microscopy
-embedding are execution-time checks. The first fresh attempt passed compute-node libraries, observer/native transfer and scheduler
-limits; its later competitive-parent failure prevented perspective fitting and validation.
-Known assay timing proxies and the restricted shared-parent embedding remain scientific limitations from the pilots.
+No aggregate native-stage clock runs while tasks wait in the queue. Individual native timeouts remain 900 seconds for lineage and
+480 seconds for perspective; outer native jobs allow 45 minutes for observation processing. Reports distinguish accepted available fits,
+search-quota shortfalls, partial/unavailable validation, scientific validity and worker completion. They never infer full scientific
+completion from score-file existence or scheduler success.
 
-The test suite generates invented fixtures at runtime under the configured scratch directory, including an intentionally synthetic
-118-episode/343-row support shape. It does not read laboratory measurements. `source_manifest.json` contains source hashes only;
-`source_origins.json` gives a concise development mapping without historical runtime paths or experimental manifests.
+## External engines
+
+Use separate external **PhysiCell 1.14.2** checkouts/builds. Preserve each checkout's `core/`, `modules/`, `BioFVM/`, Makefile and license.
+For lineage install `vendor/assets/physicell/baseline_runtime.cpp` as `main.cpp`. For perspective install
+`assets/perspective/physicell/main.cpp` and adjacent `wgd_runtime.h` at the checkout root. Build each with:
+
+```bash
+make -j 4 PhysiCell_custom_module_OBJECTS=
+```
+
+The empty override avoids duplicate custom-module symbols. Supply the two resulting executable paths explicitly. Canonical XML
+sources are `vendor/assets/physicell/PhysiCell_settings.xml` and `assets/perspective/physicell/PhysiCell_settings.xml`. Runtime exporters
+write fitted XML, cell rules, initial cells, sampling times and output locally. Stock PhysiCell and the older generic 29-column observer
+are different models. Exact source/assets and external binary identities are frozen separately.
+
+`source_origins.json` maps development sources without experimental paths. `source_manifest.json` contains public source hashes only.
+No prepared data, binaries, detailed private provenance or old run snapshots belong in this package. Synthetic fixtures are generated
+under temporary scratch directories. Native support/timeout/refinement tests are in `vendor/native_support_mock.py`; they use fakes,
+never the scientific models or external engines. The complete mock suite checks scheduler and terminal failure paths without processes.

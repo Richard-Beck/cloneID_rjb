@@ -27,7 +27,7 @@ PACKAGE = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PACKAGE.parents[4]/"examples/sum159/baseline.json"
 VERSION = 1
 RUNTIME_COMMANDS = {
-    "lineage-fit", "lineage-finalize", "lineage-simulate", "lineage-score",
+    "lineage-fit", "lineage-finalize", "lineage-simulate", "lineage-score", "lineage-score-candidate",
     "perspective-fit", "perspective-embedding-check",
     "perspective-native", "perspective-native-analyze", "perspective-refine",
 }
@@ -99,13 +99,10 @@ def load_config(path):
             value=config[section][name]
             if not isinstance(value,(int,float)) or isinstance(value,bool) or not math.isfinite(value) or value<=0:
                 raise SetupError("Finite positive runtime allowance required: "+section+"."+name)
-    if config["perspective"]["minimum_competitive_shared_parents"]<2:
-        raise SetupError("Current perspective initialization requires at least two competitive shared parents")
     terminal=config["perspective"]["conditional"]
-    if terminal["permanent_anchors"]!=2 or len(config["perspective"]["alphas"])<2:
-        raise SetupError("Confirmed screen requires two shared anchors in the first two alpha buckets")
-    if terminal["finalists"]!=3 or terminal["finalist_best_count"]!=2:
-        raise SetupError("Confirmed terminal rule selects two best distinct sources plus a diverse third")
+    for name in ("permanent_anchors","finalists","finalist_best_count"):
+        if type(terminal[name]) is not int or terminal[name]<1:raise SetupError("Positive terminal quota required: "+name)
+    if terminal["finalist_best_count"]>terminal["finalists"]:raise SetupError("Best finalist quota exceeds total quota")
     if terminal["minority_probe_fractions"]!=[.01,.05,.95,.99]:
         raise SetupError("Probe sensitivity operators require the confirmed 1/5/95/99percent probes")
     for stage in ("screen","final_validation"):
@@ -318,7 +315,7 @@ def dependency_plan(config, config_path, check):
     selected=c["screen_candidates_per_alpha"]*len(p["alphas"])
     screen_native=selected*c["screen_replicates"]*(c["screen_passages"]+oxygen*len(c["minority_probe_fractions"]))
     final_native=c["finalists"]*c["final_replicates"]*(observed["episodes"]+oxygen*len(c["minority_probe_fractions"]))
-    return {"mode":"SETUP_ONLY_DRY_RUN","execution_ready":check["execution_ready"],"execution_blockers":check["execution_blockers"],"nodes":spec["nodes"],"scheduler_specification":spec,"common_totals":{"planned_tasks":scheduler_plan["total_array_tasks"],"lineage_new_fits":l["shared_starts"]+ridge_count,"lineage_native_trajectories":shared_native+ridge_native,"perspective_new_search_fits":p["starts_per_alpha"]*len(p["alphas"]),"perspective_bounded_refinement_slots":selected,"perspective_screen_native_trajectories":screen_native,"perspective_final_native_trajectories":final_native,"perspective_all_native_trajectories":screen_native+final_native,"oxygen_levels":oxygen,"native_replicates_are_configurable":True},"terminal_policy":{"selected":"conditional_native_correction_refinement_independent_finalists","selection":"executed top5+5 screen rule, two anchors; two best distinct-source finalists plus competitive diverse third","screen_passages":c["screen_passages"],"screen_replicates":c["screen_replicates"],"final_passages":observed["episodes"],"final_replicates":c["final_replicates"],"acceptance":config["execution"]["acceptance_policy"],"post_validation_adaptive_nodes":[],"implementation_complete":True},"resource_plan":{"status":config["resources"]["status"],"fit_optimizer_allowance_cpu_hours":((l["shared_starts"]+ridge_count)*l["optimizer_seconds"]+p["starts_per_alpha"]*len(p["alphas"])*p["optimizer_seconds"]+selected*c["refinement_seconds"])/3600,"fit_allowance_excludes":"JIT/start screening, finalization, analysis, failed attempts and reports; measure separately","lineage_native_timeout_ceiling_cpu_hours":(shared_native+ridge_native)*l["native_timeout_seconds"]/3600,"perspective_native_timeout_ceiling_cpu_hours":(screen_native+final_native)*p["native_timeout_seconds"]/3600,"relative_stage_deadlines":c["native_stage_deadline_seconds"],"deadline_origin":c["deadline_origin"],"historical_lineage_measured_cpu_hours":34.0167,"historical_lineage_allocated_cpu_hours":70.1492,"historical_usage_is_context_only":True,"elapsed_estimate":None,"queue_and_dependency_time":"Separate Eligible/Start timing where available; not CPU use"},"runtime_provenance":{"parameter_reuse":"none from historical runs","new_parent_source":"NEW_RUN/lineage/shared_scores.json, matching run/input identities and complete native support","measurement_reuse":config["inputs"]["scratch_boundary"],"config_sha256":sha(config_path)},"no_scheduler_calls":True,"no_scientific_imports":True}
+    return {"mode":"SETUP_ONLY_DRY_RUN","execution_ready":check["execution_ready"],"execution_blockers":check["execution_blockers"],"nodes":spec["nodes"],"scheduler_specification":spec,"common_totals":{"planned_tasks":scheduler_plan["total_array_tasks"],"lineage_new_fits":l["shared_starts"]+ridge_count,"lineage_native_trajectories":shared_native+ridge_native,"perspective_new_search_fits":p["starts_per_alpha"]*len(p["alphas"]),"perspective_bounded_refinement_slots":selected*c.get("refinement_replicates",1),"perspective_refinement_replicates":c.get("refinement_replicates",1),"perspective_screen_native_trajectories":screen_native,"perspective_final_native_trajectories":final_native,"perspective_all_native_trajectories":screen_native+final_native,"oxygen_levels":oxygen,"native_replicates_are_configurable":True},"terminal_policy":{"selected":"conditional_native_correction_refinement_independent_finalists","selection":"executed top5+5 screen rule, two anchors; two best distinct-source finalists plus competitive diverse third","screen_passages":c["screen_passages"],"screen_replicates":c["screen_replicates"],"final_passages":observed["episodes"],"final_replicates":c["final_replicates"],"acceptance":config["execution"]["acceptance_policy"],"post_validation_adaptive_nodes":[],"implementation_complete":True},"resource_plan":{"status":config["resources"]["status"],"fit_optimizer_allowance_cpu_hours":((l["shared_starts"]+ridge_count)*l["optimizer_seconds"]+p["starts_per_alpha"]*len(p["alphas"])*p["optimizer_seconds"]+selected*c.get("refinement_replicates",1)*c["refinement_seconds"])/3600,"fit_allowance_excludes":"JIT/start screening, finalization, analysis, failed attempts and reports; measure separately","lineage_native_timeout_ceiling_cpu_hours":(shared_native+ridge_native)*l["native_timeout_seconds"]/3600,"perspective_native_timeout_ceiling_cpu_hours":(screen_native+final_native)*p["native_timeout_seconds"]/3600,"relative_stage_deadlines":c["native_stage_deadline_seconds"],"deadline_origin":c["deadline_origin"],"historical_lineage_measured_cpu_hours":34.0167,"historical_lineage_allocated_cpu_hours":70.1492,"historical_usage_is_context_only":True,"elapsed_estimate":None,"queue_and_dependency_time":"Separate Eligible/Start timing where available; not CPU use"},"runtime_provenance":{"parameter_reuse":"none from historical runs","new_parent_source":"NEW_RUN/lineage/shared_scores.json, matching run/input identities and complete native support","measurement_reuse":config["inputs"]["scratch_boundary"],"config_sha256":sha(config_path)},"no_scheduler_calls":True,"no_scientific_imports":True}
 
 
 def stratified(bounds, count, seed):
@@ -415,28 +412,59 @@ def verify_runtime_dependencies(run):
         if sha(item["path"])!=item["sha256"]:raise SetupError("Frozen runtime dependency changed: "+item["role"])
 
 
+def fresh_shared_parent(run):
+    """A declared last-resort *unfitted* current-run design point, never an old fit."""
+    candidate=read(Path(run)/"lineage/shared_candidates.json")[0]
+    return {"status":"unfitted_initial","candidate":dict(candidate,id="fresh_initial_"+candidate["id"]),"source_candidate":candidate,"x":candidate["initial"],"ranking_score":None,"ranking_basis":"fresh_unfitted_initial","approximation_data_loss":None,"parent_source":"current_run_fresh_design"}
+
+
+def parent_ranking_key(value):
+    evidence=value.get("ranking_evidence",{})
+    basis=value.get("ranking_basis")
+    tier=0 if basis=="native_full" else 1 if basis=="native_partial_normalized" else 2
+    pattern=evidence.get("pattern_sha256") or hashlib.sha256(json.dumps(value.get("native_support",[]),sort_keys=True,allow_nan=False).encode()).hexdigest()
+    return (tier,-evidence.get("component_fraction",0.),-evidence.get("weight_fraction",0.),pattern if tier==1 else "",value["ranking_score"] if value["ranking_score"] is not None else math.inf,value["candidate"]["id"])
+
+
 def current_shared_parents(run, config):
-    """Never follows a source path supplied by a candidate/ranking record."""
+    """Prefer full native evidence, then partial native evidence, then saved valid fits.
+
+    Missing native evidence is a degradation. Foreign or altered evidence is an error.
+    The last resort remains a fresh current-run design point and must pass embedding.
+    """
     run, _, identity = run_check(run)
-    scores_path = run/"lineage/shared_scores.json"
-    score_manifest = read(run/"lineage/shared_score_provenance.json")
-    if score_manifest.get("run_id") != identity["run_id"] or score_manifest.get("scores_sha256") != sha(scores_path) or score_manifest.get("input_manifest_sha256") != sha(run/"input_manifest.json"):
-        raise SetupError("Shared ranking does not belong to this frozen new run")
-    starts = {c["id"]:c for c in read(run/"lineage/shared_candidates.json")}
+    scores_path=run/"lineage/shared_scores.json";provenance=run/"lineage/shared_score_provenance.json"
+    starts={c["id"]:c for c in read(run/"lineage/shared_candidates.json")}
+    bounds=config["lineage"]["natural_bounds"]
+    def vector_ok(x):
+        return len(x)==15 and all(math.isfinite(v) and math.log(bounds[i][0])-1e-12<=v<=math.log(bounds[i][1])+1e-12 for i,v in enumerate(x))
     parents=[]
-    for p in read(scores_path):
-        if p.get("status") != "complete":
-            continue
-        cid = p["candidate"]["id"]
-        if cid not in starts or starts[cid]["run_id"] != identity["run_id"] or p["candidate"] != starts[cid]:
-            raise SetupError("Shared score references a foreign candidate")
-        bounds=config["lineage"]["natural_bounds"]
-        if len(p.get("x", [])) != 15 or any(not math.isfinite(v) or not math.log(bounds[i][0])-1e-12<=v<=math.log(bounds[i][1])+1e-12 for i,v in enumerate(p.get("x",[]))) or not math.isfinite(p.get("simulator_data_loss", math.inf)):
-            raise SetupError("Invalid shared parent vector/ranking loss")
-        parents.append(p)
-    parents.sort(key=lambda p:(p["simulator_data_loss"],p["candidate"]["id"]))
+    if scores_path.exists() and provenance.exists():
+        proof=read(provenance)
+        if proof.get("run_id")!=identity["run_id"] or proof.get("scores_sha256")!=sha(scores_path) or proof.get("input_manifest_sha256")!=sha(run/"input_manifest.json"):
+            raise SetupError("Shared ranking does not belong to this frozen new run")
+        for value in read(scores_path):
+            if value.get("status") not in {"complete","partial"}:continue
+            candidate=value["candidate"];cid=candidate["id"]
+            if cid not in starts or starts[cid]["run_id"]!=identity["run_id"] or candidate!=starts[cid]:raise SetupError("Shared score references a foreign candidate")
+            score=value.get("simulator_data_loss") if value["status"]=="complete" else value.get("partial_simulator_data_loss")
+            if not vector_ok(value.get("x",[])) or not isinstance(score,(int,float)) or not math.isfinite(score):raise SetupError("Invalid shared parent vector/ranking loss")
+            parents.append(dict(value,ranking_score=score,ranking_basis="native_full" if value["status"]=="complete" else "native_partial_normalized",parent_source="current_run_shared_score"))
+    # Keep score types separate: complete support takes precedence over partial support.
+    full=[p for p in parents if p["ranking_basis"]=="native_full"]
+    if full:parents=full
     if not parents:
-        raise SetupError("No complete current-run simulator-scored shared parents; child phases blocked")
+        for cid,candidate in starts.items():
+            folder=run/"lineage/candidates"/cid;path=folder/"final.json";proof_path=folder/"final_provenance.json"
+            if not path.exists() or not proof_path.exists():continue
+            proof=read(proof_path)
+            if proof.get("run_id")!=identity["run_id"] or proof.get("final_sha256")!=sha(path) or proof.get("input_manifest_sha256")!=sha(run/"input_manifest.json"):
+                raise SetupError("Shared finalization is foreign/modified")
+            final=read(path);score=final.get("data_loss")
+            if final.get("invalid") or not vector_ok(final.get("x",[])) or not isinstance(score,(int,float)) or not math.isfinite(score):continue
+            parents.append({"status":"approximation_fallback","candidate":candidate,"x":final["x"],"ranking_score":score,"ranking_basis":"approximation_fallback","approximation_data_loss":score,"assumption_penalty":final.get("assumption_penalty"),"parent_source":"current_run_valid_final"})
+    parents.sort(key=parent_ranking_key)
+    if not parents:parents=[fresh_shared_parent(run)]
     return parents
 
 
@@ -448,11 +476,12 @@ def prepare_ridge(run):
         raise SetupError("Ridge candidates already frozen; no overwrite")
     l=config["lineage"];parents=current_shared_parents(run,config);best=parents[0]
     bounds=np.log(l["natural_bounds"]);span=np.diff(bounds,axis=1).ravel()
-    competitive=[p for p in parents[1:] if p["simulator_data_loss"]<=best["simulator_data_loss"]*(1+l["parent_competitive_window"])]
+    competitive=[p for p in parents[1:] if best["ranking_basis"]!="native_full" or p["ranking_score"] is not None and best["ranking_score"] is not None and p["ranking_score"]<=best["ranking_score"]*(1+l["parent_competitive_window"])]
+    if not competitive:competitive=parents[1:]
     # Accepted lineage pilot's maximin diverse-parent rule, deterministic ID ties.
     others=[];chosen=[best]
     while competitive and len(others)<max(1,l["ridge_starts_per_alpha"]//2):
-        p=min(competitive,key=lambda p:(-min(float(np.linalg.norm((np.asarray(p["x"])-np.asarray(q["x"]))/span)) for q in chosen),p["simulator_data_loss"],p["candidate"]["id"]))
+        p=min(competitive,key=lambda p:(-min(float(np.linalg.norm((np.asarray(p["x"])-np.asarray(q["x"]))/span)) for q in chosen),p["ranking_score"],p["candidate"]["id"]))
         competitive.remove(p);others.append(p);chosen.append(p)
     rng=np.random.default_rng(l["seed_ridge"]);candidates=[]
     for ai,alpha in enumerate(l["alphas"]):
@@ -462,22 +491,32 @@ def prepare_ridge(run):
             x=np.tile(p["x"],2)
             if i:
                 x=np.clip(x+rng.normal(size=30)*np.tile(span,2)*(.025 if i%max(1,half)<3 else .08),np.tile(bounds[:,0],2),np.tile(bounds[:,1],2))
-            candidates.append({"id":f"ridge_a{ai:02}_{i:04}","stage":"ridge","alpha":alpha,"initial":x.tolist(),"seed":l["seed_ridge"]+len(candidates),"parent":p["candidate"]["id"],"parent_scores_sha256":sha(run/"lineage/shared_scores.json"),"parent_run_id":identity["run_id"],"origin":"current-run simulator-ranked shared parent","parent_fallback":not bool(others) and i>=half})
+            candidates.append({"id":f"ridge_a{ai:02}_{i:04}","stage":"ridge","alpha":alpha,"initial":x.tolist(),"seed":l["seed_ridge"]+len(candidates),"parent":p["candidate"]["id"],"parent_scores_sha256":sha(run/"lineage/shared_scores.json") if (run/"lineage/shared_scores.json").exists() else None,"parent_run_id":identity["run_id"],"origin":"current-run shared parent; "+p["ranking_basis"],"parent_ranking_basis":p["ranking_basis"],"parent_fallback":not bool(others) and i>=half})
     write(destination,candidates)
     return candidates
 
 
-def prepare_perspective(run, eligible_shared_ids=None, finalize_screened_pool=False):
+def prepare_perspective(run, eligible_shared_ids=None, finalize_screened_pool=False, embedding_results=None):
     """Mirror current explore.prepare mapping without evaluating any model."""
     import numpy as np
     run, config, identity=run_check(run);p=config["perspective"]
     if (run/"perspective/candidates.json").exists() and not finalize_screened_pool:
         raise SetupError("Perspective starts already frozen; no overwrite")
     ranked=current_shared_parents(run,config)
-    parents=[q for q in ranked if q["simulator_data_loss"]<=ranked[0]["simulator_data_loss"]*(1+p["shared_parent_competitive_window"])]
-    if eligible_shared_ids is not None:parents=[q for q in parents if q["candidate"]["id"] in eligible_shared_ids]
-    if len(parents)<p["minimum_competitive_shared_parents"]:
-        raise SetupError("Current perspective source requires at least two competitive shared parents; no silent fallback or old fit")
+    best=ranked[0]["ranking_score"]
+    parents=[q for q in ranked if ranked[0]["ranking_basis"]!="native_full" or best is None or q["ranking_score"] is not None and q["ranking_score"]<=best*(1+p["shared_parent_competitive_window"])]
+    # The competitive window is a preference, not a prerequisite for useful work.
+    target=p["conditional"]["permanent_anchors"]
+    for parent in ranked:
+        if len(parents)>=target:break
+        if parent not in parents:parents.append(parent)
+    fresh=fresh_shared_parent(run)
+    fresh_fallback=[] if any(q["candidate"]["id"]==fresh["candidate"]["id"] for q in parents) else [fresh]
+    if eligible_shared_ids is not None:
+        eligible=set(eligible_shared_ids)
+        parents=[q for q in parents if q["candidate"]["id"] in eligible]
+        if not parents:parents=[q for q in fresh_fallback if q["candidate"]["id"] in eligible]
+        fresh_fallback=[]
     if finalize_screened_pool:
         if (run/"perspective/embedding_check.json").exists():raise SetupError("Perspective numerical parent screen already finalized")
         if (run/"perspective/candidates").exists() and any((run/"perspective/candidates").iterdir()):raise SetupError("Cannot change perspective starts after scientific candidate outputs exist")
@@ -494,23 +533,27 @@ def prepare_perspective(run, eligible_shared_ids=None, finalize_screened_pool=Fa
         if not qs or sum(q["n"] for q in qs)==0:
             raise SetupError("Missing founder assay initialization support")
         founder.append(float(np.clip(sum(q["k"] for q in qs)/sum(q["n"] for q in qs),1e-6,1-1e-6)))
-    mapped=[]
-    for parent in parents:
-        z=np.asarray(parent["x"])
-        biology=z[p["state_parameter_indices_from_lineage"]]
+    def mapped_parent(parent):
+        parent=dict(parent)
+        evaluated=(embedding_results or {}).get(parent["candidate"]["id"])
+        if evaluated:
+            parent.update(approximation_data_loss=evaluated["data_loss"],assumption_penalty=evaluated.get("assumption_penalty",0.))
+        z=np.asarray(parent["x"]);biology=z[p["state_parameter_indices_from_lineage"]]
         x=np.r_[founder,np.log(1e-12),0.,1.,z[p["common_initialization_indices_from_lineage"]],biology,biology]
-        mapped.append({"id":parent["candidate"]["id"],"x":x.tolist(),"native_microscopy_loss":parent["simulator_data_loss"],"reference":parent,"run_id":identity["run_id"]})
+        return {"id":parent["candidate"]["id"],"x":x.tolist(),"native_microscopy_loss":parent.get("simulator_data_loss"),"ranking_score":parent["ranking_score"],"ranking_basis":parent["ranking_basis"],"reference":parent,"embedding_result":evaluated,"run_id":identity["run_id"]}
+    mapped=[mapped_parent(parent) for parent in parents]
+    mapped_fresh=[mapped_parent(parent) for parent in fresh_fallback]
     bounds=np.asarray(p["bounds"]);width=np.diff(bounds,axis=1).ravel();candidates=[]
     def founder_draw(rng):
         u=rng.random()
         low=10**rng.uniform(-9,np.log10(.5)) if u<.6 else rng.uniform(.01,.99) if u<.85 else 1-10**rng.uniform(-8,-.31)
         high=1-10**rng.uniform(-9,np.log10(.5)) if rng.random()<.75 else rng.uniform(.01,.99)
         return [low,high]
-    for ai,alpha in enumerate(p["alphas"]):
+    for ai,alpha in enumerate(p["alphas"]) if mapped else []:
         half=p["starts_per_alpha"]//2
         for i in range(p["starts_per_alpha"]):
             ix=ai*p["starts_per_alpha"]+i;rng=np.random.default_rng(p["seed_search"]+1000+ix)
-            parent=mapped[0] if i<half else mapped[1+(i-half)%(len(mapped)-1)]
+            parent=mapped[0] if i<half or len(mapped)==1 else mapped[1+(i-half)%(len(mapped)-1)]
             fallback=np.asarray(parent["x"]);x=fallback.copy();kind="unchanged_shared_anchor"
             if i:
                 kind=["small_contrasts","moderate_contrasts","broad_contrasts","selection_focused"][i%4]
@@ -521,8 +564,8 @@ def prepare_perspective(run, eligible_shared_ids=None, finalize_screened_pool=Fa
                         x[[lo,hi]]+=rng.normal(0,.10,2)*width[[lo,hi]]
                 x[3:5]=[0.,1.] if ix%5==0 else [rng.beta(1.2,3),rng.uniform(0,1)]
             x[2]=np.log(1e-12);x=np.clip(x,bounds[:,0],bounds[:,1]);x[:2]=np.clip(x[:2],1e-10,1-1e-10)
-            candidates.append({"id":f"no_wgd_a{ai:02}_{i:04}","index":ix,"family":"no_wgd","alpha":alpha,"seed":p["seed_search"]+1000+ix,"initial":x.tolist(),"parent":parent["id"],"parent_x":parent["x"],"fallback_initial":fallback.tolist(),"origin":kind,"search_seconds":p["optimizer_seconds"],"parent_run_id":identity["run_id"],"parent_scores_sha256":sha(run/"lineage/shared_scores.json")})
-    write(run/"perspective/parents.json",{"shared":mapped,"incumbents":[],"initialization":"only THIS NEW RUN's completed simulator-ranked SHARED lineage fits","parent_run_id":identity["run_id"],"parent_scores_sha256":sha(run/"lineage/shared_scores.json"),"numerical_embedding_check":"pending execution; no scientific model evaluated during setup"})
+            candidates.append({"id":f"no_wgd_a{ai:02}_{i:04}","index":ix,"family":"no_wgd","alpha":alpha,"seed":p["seed_search"]+1000+ix,"initial":x.tolist(),"parent":parent["id"],"parent_x":parent["x"],"fallback_initial":fallback.tolist(),"origin":kind,"parent_ranking_basis":parent["ranking_basis"],"search_seconds":p["optimizer_seconds"],"parent_run_id":identity["run_id"],"parent_scores_sha256":sha(run/"lineage/shared_scores.json") if (run/"lineage/shared_scores.json").exists() else None})
+    write(run/"perspective/parents.json",{"shared":mapped,"fresh_fallback":mapped_fresh,"incumbents":[],"initialization":"same-run shared evidence; full native preferred, partial/approximation/fresh design explicitly labeled","degraded":len(mapped)<target or any(parent["ranking_basis"]!="native_full" for parent in mapped),"status":"available" if mapped else "unavailable_invalid_parent_embeddings","parent_run_id":identity["run_id"],"parent_scores_sha256":sha(run/"lineage/shared_scores.json") if (run/"lineage/shared_scores.json").exists() else None,"numerical_embedding_check":"pending execution; no scientific model evaluated during setup"})
     write(run/"perspective/anchors.json",[{"id":"anchor_"+parent["id"],"family":"no_wgd","alpha":0.,"initial":parent["x"],"x":parent["x"],"parent":parent["id"],"origin":"identical-state shared physical anchor; fresh two-state native evaluation still required"} for parent in mapped])
     write(run/"perspective/candidates.json",candidates)
     return candidates
@@ -539,12 +582,67 @@ def execution_gate(config):
         raise SetupError("Scientific workers require SLURM")
 
 
+def embedding_parents(run):
+    value=read(Path(run)/"perspective/parents.json")
+    return value["shared"]+value.get("fresh_fallback",[])
+
+
+def finalize_embeddings(run):
+    """Reduce independently evaluated parent checks, retaining useful valid parents."""
+    run,config,_=run_check(run);root=run/"perspective";parents=read(root/"parents.json")
+    checks=[];valid=[];evaluated={}
+    for index,parent in enumerate(embedding_parents(run)):
+        path=root/"embedding_checks"/(str(index)+".json")
+        value=read(path) if path.exists() else {"parent":parent["id"],"valid":False,"status":"missing_parent_check"}
+        if path.exists() and (value.get("parent_sha256")!=hashlib.sha256(json.dumps(parent,sort_keys=True,allow_nan=False).encode()).hexdigest()):raise SetupError("Parent embedding check references modified parameters")
+        checks.append(value)
+        if value.get("valid"):
+            valid.append(parent["id"])
+            evaluated[parent["id"]]=value["evaluation"]
+    primary=[p["id"] for p in parents["shared"] if p["id"] in valid]
+    eligible=primary or [p["id"] for p in parents.get("fresh_fallback",[]) if p["id"] in valid]
+    prepare_perspective(run,eligible_shared_ids=eligible,finalize_screened_pool=True,embedding_results=evaluated)
+    candidates=read(root/"candidates.json")
+    write(root/"embedding_check.json",{"checks":checks,"passed":bool(candidates),"status":"available" if candidates else "unavailable_no_valid_model_initialization","eligible_parent_ids":eligible,"fresh_initialization_fallback":bool(eligible and not primary),"degraded":len(eligible)<config["perspective"]["conditional"]["permanent_anchors"] or not primary,"parents_sha256":sha(root/"parents.json"),"candidates_sha256":sha(root/"candidates.json"),"assay_objective_is_additional":True,"same_stochastic_native_realization_claimed":False,"finite_embedding_differences_are_diagnostic":True})
+    import scheduler
+    scheduler.trim_unused(run,{"perspective_search":len(candidates)})
+    return eligible
+
+
+def unused_task(run, phase, index, available):
+    write(Path(run)/"outcomes/unused_tasks"/(phase+"_"+str(index)+".json"),{"status":"skipped_unused_slot","index":index,"available_tasks":available,"phase":phase,"scientific_model_called":False})
+
+
+def salvage_perspective_checkpoints(run):
+    """Finalize evaluated checkpoints after interrupted workers, without evaluation."""
+    run,config,identity=run_check(run);root=run/"perspective";path=root/"candidates.json"
+    recovered=[]
+    for candidate in read(path) if path.exists() else []:
+        folder=root/"candidates"/candidate["id"];checkpoint=folder/"checkpoint.json";final=folder/"final.json"
+        if final.exists() or not checkpoint.exists():continue
+        proof_path=folder/"attempt_identity.json"
+        if not proof_path.exists():continue
+        proof=read(proof_path)
+        if proof.get("run_id")!=identity["run_id"] or proof.get("candidate")!=candidate or proof.get("input_manifest_sha256")!=sha(run/"input_manifest.json"):raise SetupError("Interrupted perspective checkpoint is foreign/modified")
+        value=read(checkpoint);vector=value.get("x",[]);loss=value.get("loss")
+        if not value.get("valid") or not isinstance(loss,(int,float)) or not math.isfinite(loss) or len(vector)!=33 or any(not math.isfinite(v) or not config["perspective"]["bounds"][i][0]-1e-12<=v<=config["perspective"]["bounds"][i][1]+1e-12 for i,v in enumerate(vector)):continue
+        value.update(candidate=candidate,status="recovered_interrupted_checkpoint",checkpoint_sha256=sha(checkpoint),recovery_evaluated_model=False)
+        write(final,value);recovered.append({"candidate_id":candidate["id"],"checkpoint_sha256":sha(checkpoint),"final_sha256":sha(final)})
+    write(root/"audit/checkpoint_recovery.json",{"recovered":recovered,"scientific_calls":0,"time_utc":utc()})
+    return recovered
+
+
 def worker(config, config_path, run, phase, stage, index, trajectory):
     # Non-scientific preparation is available independently; all science is gated.
     if phase=="lineage-ridge-prepare":
         return prepare_ridge(run)
     if phase=="perspective-prepare":
-        return prepare_perspective(run)
+        result=prepare_perspective(run)
+        import scheduler
+        scheduler.trim_unused(run,{"perspective_embedding":len(embedding_parents(run))})
+        return result
+    if phase=="perspective-embedding-finalize":
+        return finalize_embeddings(run)
     if phase=="run-input-check":
         run_check(run,config_path)
         return
@@ -557,13 +655,41 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
         return report_run(run)
     if phase in {"perspective-screen-select","perspective-native-prepare","perspective-finalist-select"}:
         import terminal
-        if phase=="perspective-screen-select":return terminal.select_screen(run)
-        if phase=="perspective-native-prepare":return terminal.prepare_native(run,stage)
-        return terminal.select_finalists(run)
+        if phase=="perspective-screen-select":
+            salvage_perspective_checkpoints(run)
+            return terminal.select_screen(run)
+        import scheduler
+        if phase=="perspective-native-prepare":
+            result=terminal.prepare_native(run,stage)
+            selected=read(Path(run)/"perspective"/stage/"candidates.json")
+            repeats=config["perspective"]["conditional"].get("refinement_replicates",1)
+            write(Path(run)/"perspective/refinement_tasks.json",[{"index":i*repeats+j,"source_index":i,"source_id":candidate["id"],"replicate":j,"attempt_directory":"refinement/"+candidate["id"]+f"/replicate_{j:03}"} for i,candidate in enumerate(selected) for j in range(repeats)])
+            scheduler.trim_unused(run,{"perspective_screen_native":len(result),"perspective_screen_diagnostics":len(selected),"perspective_bounded_refinement":len(selected)*repeats})
+            return result
+        result=terminal.select_finalists(run)
+        scheduler.trim_unused(run,{"perspective_final_native":len(read(Path(run)/"perspective/final_validation/slots.json")),"perspective_final_diagnostics":len(result)})
+        return result
     execution_gate(config)
     run, frozen, identity=run_check(run,config_path)
     verify_runtime_dependencies(run)
     config=frozen
+    # Quotas are upper bounds; avoid scientific imports for unused reserved slots.
+    if phase in {"perspective-fit","perspective-embedding-check","perspective-native","perspective-native-analyze","perspective-refine"}:
+        if phase=="perspective-embedding-check":available=len(embedding_parents(run))
+        else:
+            path=run/"perspective"/((stage+"/slots.json") if phase=="perspective-native" else (stage+"/candidates.json") if phase=="perspective-native-analyze" else "screen_candidates.json" if phase=="perspective-refine" else "candidates.json")
+            available=len(read(path)) if path.exists() else 0
+            if phase=="perspective-refine":available*=config["perspective"]["conditional"].get("refinement_replicates",1)
+        if index>=available:return unused_task(run,phase,index,available)
+        if phase=="perspective-native":
+            stage_root=run/"perspective"/stage;deadline=read(stage_root/"stage_identity.json").get("deadline_unix")
+            if deadline is not None and deadline-time.time()<5:
+                import terminal
+                terminal.verify_native_stage(run,stage)
+                slot=read(stage_root/"slots.json")[index];destination=stage_root/"cases"/slot["candidate_id"]/f"{index:05}"
+                if destination.exists():raise SetupError("Native case attempt exists; no overwrite")
+                write(destination/"outcome.json",{"status":"not_started_deadline","slot":slot,"reason":"relative_native_stage_deadline_exhausted","scientific_model_called":False,"engine_started":False,"wall_seconds":0.})
+                return
     os.environ.setdefault("NUMBA_CACHE_DIR",str(run/"cache/numba"))
     if phase not in RUNTIME_COMMANDS:
         raise SetupError("Unimplemented perspective terminal policy or dispatcher; see ISSUES.md: "+phase)
@@ -611,6 +737,12 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
             a.score(stage)
             if stage=="shared":
                 write(a.ROOT/"shared_score_provenance.json",{"run_id":identity["run_id"],"scores_sha256":sha(a.ROOT/"shared_scores.json"),"input_manifest_sha256":sha(run/"input_manifest.json")})
+        elif phase=="lineage-score-candidate":
+            candidate=a.candidate(stage,index);directory=a.ROOT/"candidates"/candidate["id"]
+            if (directory/"final.json").exists():
+                proof=read(directory/"final_provenance.json")
+                if proof.get("run_id")!=identity["run_id"] or proof.get("candidate_id")!=candidate["id"] or proof.get("input_manifest_sha256")!=sha(run/"input_manifest.json") or proof.get("final_sha256")!=sha(directory/"final.json"):raise SetupError("Score candidate finalization is foreign/modified")
+            a.score_candidate_worker(stage,index)
     else:
         import perspective_model as a
         import perspective_search as e
@@ -624,23 +756,19 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
                 raise SetupError("Perspective fit requires finalized numerical parent screening and matching start manifests")
             candidate=read(a.ROOT/"candidates.json")[index]
             if (a.ROOT/"candidates"/candidate["id"]).exists():raise SetupError("Perspective attempt exists; no automatic retry")
+            write(a.ROOT/"candidates"/candidate["id"]/"attempt_identity.json",{"candidate":candidate,"run_id":identity["run_id"],"input_manifest_sha256":sha(run/"input_manifest.json"),"started_utc":utc()})
             e.fit(index)
         elif phase=="perspective-embedding-check":
-            data=a.Data();checks=[];eligible=[]
-            for p in read(a.ROOT/"parents.json")["shared"]:
-                result=a.evaluate(data,__import__("numpy").asarray(p["x"]),0.,"no_wgd")
-                error=abs(result["data_loss"]-p["reference"]["approximation_data_loss"]) if result.get("valid") else None
-                checks.append({"parent":p["id"],"absolute_error":error,"valid":bool(result.get("valid"))})
-                if not result.get("valid"):continue
-                if error>1e-9:
-                    write(a.ROOT/"embedding_check.json",{"checks":checks,"passed":False})
-                    raise SetupError("Shared microscopy embedding failed")
-                eligible.append(p["id"])
-            if len(eligible)<config["perspective"]["minimum_competitive_shared_parents"]:
-                write(a.ROOT/"embedding_check.json",{"checks":checks,"passed":False,"reason":"fewer_than_two_valid_competitive_shared_parents"})
-                raise SetupError("Fewer than two valid competitive shared parent embeddings; dependent fits blocked")
-            if len(eligible)!=len(checks):prepare_perspective(run,eligible_shared_ids=eligible,finalize_screened_pool=True)
-            write(a.ROOT/"embedding_check.json",{"checks":checks,"passed":True,"eligible_parent_ids":eligible,"parents_sha256":sha(a.ROOT/"parents.json"),"candidates_sha256":sha(a.ROOT/"candidates.json"),"assay_objective_is_additional":True,"same_stochastic_native_realization_claimed":False})
+            p=embedding_parents(run)[index]
+            result=a.evaluate(a.Data(),__import__("numpy").asarray(p["x"]),0.,"no_wgd")
+            expected=p["reference"].get("approximation_data_loss")
+            if expected is None and result.get("valid"):
+                import lineage_model
+                lineage_model.ROOT=run/"lineage";lineage_model.STEPS=config["lineage"]["steps"]
+                reference=lineage_model.evaluate(lineage_model.Data(),__import__("numpy").asarray(p["reference"]["x"]),0.)
+                expected=reference.get("data_loss") if not reference.get("invalid") else None
+            error=abs(result["data_loss"]-expected) if result.get("valid") and expected is not None else None
+            write(a.ROOT/"embedding_checks"/(str(index)+".json"),{"parent":p["id"],"parent_sha256":hashlib.sha256(json.dumps(p,sort_keys=True,allow_nan=False).encode()).hexdigest(),"absolute_error":error,"microscopy_agreement":error is not None and error<=1e-9,"valid":bool(result.get("valid")),"evaluation":a.clean(result),"status":"valid" if result.get("valid") else "invalid_model_initialization","finite_differences_are_diagnostic":True})
         else:
             import terminal
             import wgd_transfer
@@ -668,15 +796,17 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
             elif phase=="perspective-refine":
                 import native_refinement
                 native_refinement.r=a.ROOT;native_refinement.a=a;native_refinement.e=e
-                candidates=read(a.ROOT/"screen_candidates.json");cid=candidates[index]["id"]
-                destination=a.ROOT/"refinement"/cid
+                repeats=config["perspective"]["conditional"].get("refinement_replicates",1)
+                source_index=index//repeats;replicate=index%repeats
+                candidates=read(a.ROOT/"screen_candidates.json");cid=candidates[source_index]["id"]
+                destination=a.ROOT/"refinement"/cid/f"replicate_{replicate:03}"
                 if destination.exists():raise SetupError("Native-informed refinement attempt exists; no overwrite")
-                eligibility=terminal.refinement_eligibility(a.ROOT,candidates[index])
+                eligibility=terminal.refinement_eligibility(a.ROOT,candidates[source_index])
                 if not eligibility["eligible"]:
                     write(destination/"outcome.json",eligibility)
                     if eligibility["status"]=="failed":raise SetupError("Refinement unavailable: "+eligibility["reason"])
                     return
-                try:native_refinement.run(index,seconds=config["perspective"]["conditional"]["refinement_seconds"])
+                try:native_refinement.run(source_index,seconds=config["perspective"]["conditional"]["refinement_seconds"],replicate=replicate)
                 except Exception as error:
                     write(destination/"outcome.json",{"status":"failed","candidate_id":cid,"error":repr(error),"traceback":traceback.format_exc(),"scores_fabricated":False})
                     raise
@@ -733,7 +863,10 @@ def report_run(run):
     for stage in ("shared","ridge"):
         path=run/"lineage"/(stage+"_scores.json");values=read(path) if path.exists() else [];statuses={}
         for value in values:statuses[value["status"]]=statuses.get(value["status"],0)+1
-        result["lineage"][stage]={"status":"scored" if path.exists() else "not_scored","candidate_outcomes":statuses,"scores_sha256":sha(path) if path.exists() else None,"scores":values}
+        native_outcomes={}
+        for outcome in (run/"lineage/candidates").glob(stage+"*/simulations/*/outcome.json"):
+            state=read(outcome).get("status","unknown");native_outcomes[state]=native_outcomes.get(state,0)+1
+        result["lineage"][stage]={"status":"scored" if path.exists() else "not_scored","candidate_outcomes":statuses,"native_case_outcomes":native_outcomes,"fully_supported_candidates":statuses.get("complete",0),"scores_sha256":sha(path) if path.exists() else None,"scores":values}
     lineage_results=run/"lineage/results.json"
     if lineage_results.exists():result["lineage"]["comparison"]=read(lineage_results)
     root=run/"perspective";candidate_path=root/"candidates.json";candidates=read(candidate_path) if candidate_path.exists() else [];outcomes=[]
@@ -753,14 +886,21 @@ def report_run(run):
         native[stage]={"contract":read(contract) if contract.exists() else None,"diagnostics":diagnostics,"case_outcomes":case_outcomes,"requested_cases":read(contract)["total_cases"] if contract.exists() else None,"recorded_case_outcomes":sum(case_outcomes.values())}
     finalist_path=root/"finalists.json";finalists=read(finalist_path) if finalist_path.exists() else []
     refinement=[]
-    for directory in sorted((root/"refinement").glob("*")):
+    refinement_dirs=sorted({p.parent for p in (root/"refinement").glob("**/final.json")}|{p.parent for p in (root/"refinement").glob("**/outcome.json")})
+    for directory in refinement_dirs:
         final=directory/"final.json";outcome=directory/"outcome.json"
-        refinement.append({"candidate_id":directory.name,"status":"completed" if final.exists() else read(outcome).get("status","unknown") if outcome.exists() else "unavailable","outcome":read(outcome) if outcome.exists() else None})
+        refinement.append({"attempt_directory":str(directory.relative_to(root)),"candidate_id":read(final).get("candidate",{}).get("id") if final.exists() else directory.parent.name,"status":"completed" if final.exists() else read(outcome).get("status","unknown") if outcome.exists() else "unavailable","outcome":read(outcome) if outcome.exists() else None})
     final_native=native["final_validation"]
-    diagnostics_complete=bool(finalists) and len(final_native["diagnostics"])==len(finalists) and all(d["summary"] is not None and not d["summary"].get("failures") for d in final_native["diagnostics"])
-    acceptance={"policy":config["execution"]["acceptance_policy"],"decision":"accept_for_now" if finalists else "pending_no_terminal_fit_available","validation_status":"complete" if diagnostics_complete else "incomplete" if finalists else "not_attempted_or_blocked","quality_threshold_applied":False,"additional_correction":False,"refit_triggered":False,"additional_native_batch_triggered":False,"diagnostics_do_not_change_frozen_physical_parameters":True}
-    result["perspective"]={"terminal_policy":config["execution"]["terminal_policy"],"terminal_workers_implemented":True,"exploratory_outcomes":outcomes,"refinement_outcomes":refinement,"finalists":finalists,"native":native,"acceptance":acceptance}
-    result["complete_scientific_baseline"]=diagnostics_complete and result["lineage"]["shared"]["status"]=="scored" and result["lineage"]["ridge"]["status"]=="scored"
+    def complete_diagnostic(diagnostic):
+        value=diagnostic["summary"] or {};loss=value.get("native_microscopy_loss")
+        return value.get("status")=="complete" and value.get("correction_status")=="available" and not value.get("failures") and isinstance(loss,(int,float)) and math.isfinite(loss) and value.get("main_complete",0)==value.get("main_requested",-1) and value.get("probes_complete",0)==value.get("probes_requested",-1)
+    diagnostics_complete=bool(finalists) and len(final_native["diagnostics"])==len(finalists) and all(complete_diagnostic(d) for d in final_native["diagnostics"]) and final_native["recorded_case_outcomes"]==final_native["requested_cases"] and final_native["case_outcomes"].get("complete",0)==final_native["requested_cases"]
+    quota_complete=len(finalists)==config["perspective"]["conditional"]["finalists"]
+    acceptance={"policy":config["execution"]["acceptance_policy"],"decision":"accept_for_now" if finalists else "unavailable_no_valid_terminal_fit","validation_status":"complete" if diagnostics_complete else "incomplete" if finalists else "unavailable","search_breadth_degraded":not quota_complete,"terminal_fit_available":bool(finalists),"quality_threshold_applied":False,"additional_correction":False,"refit_triggered":False,"additional_native_batch_triggered":False,"diagnostics_do_not_change_frozen_physical_parameters":True}
+    parent_path=root/"parents.json";embedding_path=root/"embedding_check.json"
+    result["perspective"]={"terminal_policy":config["execution"]["terminal_policy"],"terminal_workers_implemented":True,"parents":read(parent_path) if parent_path.exists() else None,"embedding":read(embedding_path) if embedding_path.exists() else None,"exploratory_outcomes":outcomes,"refinement_outcomes":refinement,"finalists":finalists,"requested_finalist_quota":config["perspective"]["conditional"]["finalists"],"actual_finalists":len(finalists),"native":native,"acceptance":acceptance,"selection_audit":read(root/"audit/finalist_selection.json") if (root/"audit/finalist_selection.json").exists() else None}
+    result["complete_scientific_baseline"]=diagnostics_complete and quota_complete and all(result["lineage"][stage]["fully_supported_candidates"]>0 for stage in ("shared","ridge"))
+    result["degraded_evidence"]=not result["complete_scientific_baseline"]
     records=[]
     for path in sorted((run/"accounting").glob("*.json")):
         value=read(path);records.append(value)
@@ -777,6 +917,7 @@ def report_run(run):
     for stage in ("shared","ridge"):
         value=result["lineage"][stage];text.append("| lineage "+stage+" | "+value["status"]+" | "+json.dumps(value["candidate_outcomes"])+" |")
     for stage,value in native.items():text.append("| perspective "+stage+" | "+str(len(value["diagnostics"]))+" candidate diagnostics | "+json.dumps(value["case_outcomes"])+" |")
+    text += ["","Finalists retained: "+str(len(finalists))+" of configured quota "+str(config["perspective"]["conditional"]["finalists"])+". Degraded evidence: "+str(result["degraded_evidence"])+".","","Ranking bases: "+json.dumps([{key:c.get(key) for key in ("id","source_id","ranking_basis","native_support")} for c in finalists])+". Partial native objectives and approximation fallbacks are labeled separately; missing components and trajectories are never assigned zero loss."]
     text += ["","Microscopy, assay deviance, ridge regularization, closure guidance, projected composition diagnostics and source hashes remain separate in results.json. Final diagnostics keep the physical parameter vector fixed.","","Measured worker CPU-hours: "+str(result["worker_compute_usage"]["measured_worker_cpu_hours"])+". Full measured-versus-allocated SLURM accounting: "+("attached in compute_usage.json" if result["compute_usage"] is not None else "not supplied; no allocation or queue measurements inferred"),"","This report only reads saved evidence. It invokes no scientific model, optimizer, simulator or scheduler.",""]
     (output/"REPORT.md").write_text("\n".join(text))
     return output/"REPORT.md"

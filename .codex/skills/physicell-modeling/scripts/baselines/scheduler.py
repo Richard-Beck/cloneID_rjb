@@ -28,8 +28,12 @@ def campaign_spec(config,config_path,run,prepared_counts):
         nodes.append(node)
     def stream(stage,count,per_candidate):
         node={"name":"lineage_"+stage+"_stream","kind":"stream","trajectories_per_candidate":[per_candidate]*count,"cwd":str(w.PACKAGE),"memory":str(r["memory_mb_per_task"])+"M","depends_on":nodes[-1]["name"],"condition":"afterok"}
-        for phase,minutes in [("fit",r["fit_wall_minutes"]),("finalize",r["finalize_wall_minutes"]),("simulate",r["native_wall_minutes"])]:
-            node[phase]={"command":command(config,config_path,run,"lineage-"+phase,stage,index=True,trajectory=phase=="simulate"),"minutes":minutes}
+        preferred=l.get("native_oxygen_priority",[])
+        slot_oxygen=[o for rep in range(l["replicates"]) for o in sorted(prepared_counts["oxygen_values"]) for group in (l["groups"] if stage=="ridge" else [None])]
+        node["trajectory_priority"]=[preferred.index(o) if o in preferred else len(preferred) for o in slot_oxygen]
+        for phase,minutes in [("fit",r["fit_wall_minutes"]),("finalize",r["finalize_wall_minutes"]),("simulate",r["native_wall_minutes"]),("score",r["report_wall_minutes"])]:
+            worker_phase="lineage-score-candidate" if phase=="score" else "lineage-"+phase
+            node[phase]={"command":command(config,config_path,run,worker_phase,stage,index=True,trajectory=phase=="simulate"),"minutes":minutes}
         nodes.append(node)
     add("verify_frozen_inputs","run-input-check")
     stream("shared",l["shared_starts"],oxygen*l["replicates"])
@@ -38,14 +42,17 @@ def campaign_spec(config,config_path,run,prepared_counts):
     stream("ridge",l["ridge_starts_per_alpha"]*len(l["alphas"]),oxygen*len(l["groups"])*l["replicates"])
     add("lineage_ridge_score","lineage-score",stage="ridge",condition="afterany")
     add("perspective_prepare","perspective-prepare")
-    add("perspective_embedding","perspective-embedding-check")
+    add("perspective_embedding","perspective-embedding-check",l["shared_starts"]+1,condition="afterany")
+    add("perspective_embedding_reduce","perspective-embedding-finalize",condition="afterany")
     add("perspective_search","perspective-fit",p["starts_per_alpha"]*len(p["alphas"]),minutes=r["fit_wall_minutes"])
     add("perspective_screen_select","perspective-screen-select",condition="afterany")
     add("perspective_screen_prepare","perspective-native-prepare",stage="screen")
     selected=c["screen_candidates_per_alpha"]*len(p["alphas"])
     add("perspective_screen_native","perspective-native",selected*c["screen_replicates"]*(c["screen_passages"]+oxygen*len(c["minority_probe_fractions"])),stage="screen",minutes=r["native_wall_minutes"])
     add("perspective_screen_diagnostics","perspective-native-analyze",selected,stage="screen",condition="afterany")
-    add("perspective_bounded_refinement","perspective-refine",selected,condition="afterany",minutes=r["fit_wall_minutes"])
+    repeats=c.get("refinement_replicates",1)
+    add("perspective_bounded_refinement","perspective-refine",selected*repeats,condition="afterany",minutes=r["fit_wall_minutes"])
+    nodes[-1]["refinement_replicates"]=repeats
     add("perspective_finalist_select","perspective-finalist-select",condition="afterany")
     add("perspective_final_native","perspective-native",c["finalists"]*c["final_replicates"]*(episodes+oxygen*len(c["minority_probe_fractions"])),stage="final_validation",minutes=r["native_wall_minutes"])
     add("perspective_final_diagnostics","perspective-native-analyze",c["finalists"],stage="final_validation",condition="afterany")
@@ -55,27 +62,39 @@ def campaign_spec(config,config_path,run,prepared_counts):
 
 def task_groups(node):
     if node["kind"]!="stream":
+        if "refinement_replicates" in node:
+            repeats=node["refinement_replicates"]
+            return [{"first":start,"last":start+repeats-1,"phase":"command","candidate":None,"parent":None,"source_candidate_index":start//repeats,"command":node["command"],"minutes":node["minutes"]} for start in range(0,node["tasks"],repeats)],node["tasks"]
         return [{"first":0,"last":node["tasks"]-1,"phase":"command","candidate":None,"parent":None,"command":node["command"],"minutes":node["minutes"]}],node["tasks"]
     counts=node["trajectories_per_candidate"];count=len(counts)
     if not counts or any(type(v) is not int or v<=0 for v in counts):raise w.SetupError("Positive frozen trajectory counts required")
     groups=[]
     for phase,offset,parent_offset in [("fit",0,None),("finalize",count,0)]:
         for i in range(count):groups.append({"first":offset+i,"last":offset+i,"phase":phase,"candidate":i,"parent":None if parent_offset is None else parent_offset+i,"command":node[phase]["command"],"minutes":node[phase]["minutes"]})
-    cursor=2*count
-    for i,native in enumerate(counts):
-        groups.append({"first":cursor,"last":cursor+native-1,"phase":"simulate","candidate":i,"parent":count+i,"command":node["simulate"]["command"],"minutes":node["simulate"]["minutes"]});cursor+=native
+    cursor=2*count;native_ranges=[[] for _ in counts];local_slots=[[] for _ in counts]
+    priority=node.get("trajectory_priority",[])
+    ordered=sorted(((priority[slot] if slot<len(priority) else 0,slot,i) for i,native in enumerate(counts) for slot in range(native)))
+    for _,slot,i in ordered:
+        native_ranges[i].append(cursor);local_slots[i].append(slot);cursor+=1
+    for i,indices in enumerate(native_ranges):
+        groups.append({"first":min(indices),"last":max(indices),"indices":indices,"trajectory_indices":local_slots[i],"phase":"simulate","candidate":i,"parent":count+i,"command":node["simulate"]["command"],"minutes":node["simulate"]["minutes"]})
+    for i,parents in enumerate(native_ranges):
+        groups.append({"first":cursor,"last":cursor,"phase":"score","candidate":i,"parent":None,"parents":parents,"command":node["score"]["command"],"minutes":node["score"]["minutes"]});cursor+=1
     return groups,cursor
 
 
 def task_context(manifest,index):
     """No subprocess, import of scientific models, or scheduler query."""
     for group in manifest["task_groups"]:
-        if group["first"]<=index<=group["last"]:
+        if index in group["indices"] if "indices" in group else group["first"]<=index<=group["last"]:
             candidate=group["candidate"] if group["candidate"] is not None else index
-            values={"<CANDIDATE_INDEX>":str(candidate),"<TRAJECTORY_INDEX>":str(index-group["first"])}
+            trajectory=group["trajectory_indices"][group["indices"].index(index)] if "indices" in group else index-group["first"]
+            values={"<CANDIDATE_INDEX>":str(candidate),"<TRAJECTORY_INDEX>":str(trajectory)}
             argv=[values.get(value,value) for value in group["command"]]
             if any(value.startswith("<") and value.endswith(">") for value in argv):raise w.SetupError("Unresolved dispatcher placeholder")
-            return argv,{"candidate_index":candidate,"trajectory_index":index-group["first"] if group["phase"]=="simulate" else None,"phase":group["phase"],"array_index":index}
+            context={"candidate_index":candidate,"trajectory_index":trajectory if group["phase"]=="simulate" else None,"phase":group["phase"],"array_index":index}
+            if "source_candidate_index" in group:context.update(source_candidate_index=group["source_candidate_index"],refinement_replicate=index-group["first"])
+            return argv,context
     raise w.SetupError("Task index outside frozen scheduler manifest")
 
 
@@ -108,10 +127,11 @@ def plan(spec,out,materialize=True):
         job="DRY_"+name;jobs[name]=job;updates=[]
         if node["kind"]=="stream":
             for group in groups:
-                selector=str(group["first"]) if group["first"]==group["last"] else "["+str(group["first"])+"-"+str(group["last"])+"]"
+                selector="["+",".join(map(str,group["indices"]))+"]" if "indices" in group else str(group["first"]) if group["first"]==group["last"] else "["+str(group["first"])+"-"+str(group["last"])+"]"
                 update=["scontrol","update","JobId="+job+"_"+selector,"TimeLimit="+str(group["minutes"])]
                 deps=[external] if external else []
                 if group["parent"] is not None:deps.append("afterany:"+job+"_"+str(group["parent"]))
+                if group.get("parents"):deps.append("afterany:"+":".join(job+"_"+str(parent) for parent in group["parents"]))
                 if deps:update.append("Dependency="+",".join(deps))
                 updates.append(update);recipes.append(update)
         if materialize:
@@ -135,6 +155,39 @@ def dispatch(manifest_path,index,expected_sha256=None):
     # Dispatch in-process through the same parser/gates, preserving all accounting.
     w.write(run/"dispatch"/(manifest["node"]+"_"+str(index)+".json"),dict(context,node=manifest["node"],manifest_sha256=w.sha(manifest_path)))
     return w.main(argv[2:])
+
+
+def trim_unused(run, active_counts, executor=None):
+    """Cancel only never-needed reserved slots after an actual dynamic manifest exists.
+
+    Normal preparation and mocks never contact the scheduler. During execution the
+    preparation job is still an unmet parent, so downstream slots cannot have run.
+    Every quota shortfall is recorded separately from failed scientific attempts.
+    """
+    run,config,_=w.run_check(run)
+    submission=run/"scheduler_submission.json"
+    if not config["execution"]["authorized"] or not os.environ.get("SLURM_JOB_ID") or not submission.exists():return {}
+    w.execution_gate(config)
+    saved=w.read(submission);plan=w.read(saved["plan_path"])
+    nodes={node["name"]:node for node in plan["nodes"]};records={}
+    if executor is None:
+        import subprocess
+        executor=lambda argv:subprocess.check_output(argv,text=True)
+    for name,active in active_counts.items():
+        if name not in nodes:raise w.SetupError("Unknown dynamic scheduler node: "+name)
+        requested=nodes[name]["tasks"]
+        if type(active) is not int or not 0<=active<=requested:raise w.SetupError("Dynamic task count exceeds frozen quota: "+name)
+        record={"node":name,"active_tasks":active,"reserved_tasks":requested,"unused_tasks":requested-active,"reason":"unused_reserved_quota_after_manifest_preparation","time_utc":w.utc(),"scientific_failure":False}
+        if active<requested:
+            job=saved["jobs"][name]
+            target=job if active==0 else job+"_["+str(active)+"-"+str(requested-1)+"]"
+            record["command"]=["scancel",target]
+            # Save the reason before the administrative cancellation.
+            w.write(run/"scheduler/dynamic_counts"/(name+".json"),record)
+            executor(record["command"])
+        records[name]=record
+        w.write(run/"scheduler/dynamic_counts"/(name+".json"),record)
+    return records
 
 
 def submit(spec,out,executor=None):

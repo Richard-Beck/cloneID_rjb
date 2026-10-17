@@ -36,13 +36,16 @@ arms/passages within a founder in this pilot; the recorded oxygen history drives
 shares biology by current 2N/4N genomic state across founders and treatments. Its pre-existing mixtures change through differential
 division and survival, with zero state transitions. Density and cluster initialization are shared.
 
-Initialize perspective candidates from competitive simulator-ranked shared lineage parents produced by the **same new run**. The
+Initialize perspective candidates preferentially from competitive simulator-ranked shared lineage parents produced by the **same new run**. The
 founder-ridge vector is not the parent: founder-specific density/cluster parameters do not embed in the perspective parameterization.
 Check the shared physical embedding explicitly; stochastic native realizations need not have identical scores.
 
-This pilot adapter requires at least two valid shared parents within 20% of the best native microscopy loss. It stops the perspective
-branch when that prerequisite is unmet. Preserve the failed attempt and its costs; changing the cutoff, adding fits or reusing historical
-vectors changes the planned campaign and needs the user's direction.
+The 20% competitive window is an initialization preference. Fill a scarce pool with other valid current-run shared parents; one valid
+parent is sufficient. If complete native evidence is unavailable, use explicitly labelled partial-native, approximation or fresh-design
+fallbacks from this run. Check numerical embedding before use. Full native support takes precedence; compare partial losses only within
+the same support pattern, with component and requested-weight coverage recorded. Never substitute an approximation loss for a native loss.
+Poor fit quality, missing simulations and fewer-than-requested candidates remain visible through the final report. Identity, input
+integrity and physical-mapping failures remain errors.
 
 The accepted observer has 30 columns: log1p(total retained live + dead count), log1p(dead count), coverage, logged gap, Clark-Evans
 organization and 25 relative log-area quantiles. The composite cost weights total count at 0.5 and each of dead count, coverage,
@@ -58,7 +61,7 @@ native score, never the optimizer score as a substitute.
 The public configuration and numerical source encode the following procedure, with deterministic seeds and tie-breaking. Freeze their
 identities with prepared inputs before a new run. These counts describe the pilot adapter, not mandatory defaults for every study.
 
-1. Fit 16 fresh shared lineage starts. Evaluate their final vectors with two native seeds and rank the supported results. Fit 12
+1. Fit 512 fresh shared lineage starts. Evaluate their final vectors with two native seeds and rank the supported results. Fit 100
    founder-ridge starts at each alpha in 0, 1, 10, 100 and 1000 from those new parents; evaluate final vectors and retain shared anchors.
 2. Generate 1,000 perspective exploratory starts from this run's competitive shared parents, across four configured regularization
    strengths. Check the shared embedding and retain the permanent shared anchors.
@@ -66,12 +69,13 @@ identities with prepared inputs before a new run. These counts describe the pilo
    the best 60% of valid candidates, with a pool floor of 30 and cap of 100, using normalized/transformed parameter distances. The two
    shared anchors replace the final diversity slots in the first two alpha buckets.
 4. Evaluate 24 selected passages with two native seeds plus same-oxygen minority probes at 1%, 5%, 95% and 99%. Record failures and
-   calculate native diagnostics. Apply at most 100 seconds of local refinement to non-anchor candidates with complete native support,
-   matching source/correction vectors and finite native microscopy bias. Anchors and incomplete/invalid sources receive explicit outcomes.
+   calculate native diagnostics. Run eight independent local refinements, each bounded at 100 seconds, for eligible non-anchor sources
+   with an available correction, matching source/correction vectors and finite native microscopy bias. Partial support remains labelled;
+   anchors and unavailable/invalid corrections receive explicit outcomes.
 5. Rank supported original/refined options by corrected approximation microscopy + native-screen bias + corrected assay deviance +
    ridge penalty, retaining the best option per source. Take the best two distinct sources. Choose the third by maximin parameter
    diversity among the remaining top 12 sources within `best + max(1, 0.2 * abs(best))`; fall back to the next supported source if that
-   pool is empty. Freeze the three vectors and independently evaluate all 118 passages with four seeds plus minority probes.
+   pool is empty. If fewer distinct sources are valid, retain those available and record the shortfall. Freeze the selected vectors and independently evaluate all 118 passages with four seeds plus minority probes.
 6. Report the saved validation evidence and **accept the fit for now**. Validation does not trigger another correction, refit or native
    batch. Missing tasks remain visible rather than being treated as zero loss.
 
@@ -80,13 +84,16 @@ of this protocol; do not infer additional required phases from their presence.
 
 [terminal.py](../scripts/baselines/terminal.py) implements screen eligibility, transformed distances, deterministic ties, refinement
 eligibility and finalist selection; the configuration supplies their numerical settings. These rules determine the followup batches
-without another discretionary selection step.
+without another discretionary selection step. Additional refinement starts retain the same source correction and physical model;
+finalist selection deduplicates sources rather than treating refinement replicas as independent finalists.
 
 ## Execution and reporting
 
 Inspect the concrete dry-run dependency plan and agree a resource envelope before scientific submission. Synthetic checks and a saved
 plan are useful preparation, not authorization to launch. Use SLURM for substantial work, honor the agreed campaign CPU cap and retain
-completed results on failure. Resume only the requested missing work rather than silently expanding the campaign.
+completed results on failure. Resume only the requested missing work rather than silently expanding the campaign. Queue delay must not
+consume a scientific stage allowance. Per-case engine timeouts bound failed simulations; saved snapshots at the exact requested times
+can still contribute explicit partial evidence. After individual worker failures, dependent reducers and reporting still run.
 
 The runner records source/input identities, task outcomes and selections. Report measured CPU use separately from allocation and
 elapsed time, include failed/cancelled work in campaign accounting, and state whether any live report-job snapshot is partial.

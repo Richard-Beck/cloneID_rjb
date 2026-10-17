@@ -18,7 +18,8 @@ pilot case study, not a universal choice of cell line, conditions or states.
 
 For these baselines and fresh fitting from prepared data, read [prepared-baselines](references/prepared-baselines.md). It routes to
 the dedicated runner, observer and fixed screening/refinement/validation procedure. Keep completed pilot evidence separate from the
-fresh scripted attempt, which completed lineage fitting and stopped at its competitive-parent prerequisite before perspective fitting.
+fresh scripted runs. The first attempt stopped at a restrictive parent-selection rule; the revised runner continues through parent
+scarcity and partial native support with explicit evidence labels. Poor fit quality is an outcome, not a reason to abort.
 Do not impose the older stationary/constant/adaptation comparison on this workflow.
 
 For other requested model comparisons, use the general guidance below and the relevant references. Keep full runs and private
@@ -73,7 +74,8 @@ resource envelope. Numerical defaults are proposals, never agreed budgets. See e
 
 Submit the agreed models, phases and report in one dependency campaign, with no unnecessary intermediate user checkpoints. Within each
 stage, queue each candidate's PhysiCell evaluations as its optimization finishes; share one CPU cap across fitting, finalization
-and simulation. Child fitting still waits for completed PhysiCell parent ranking. Every final vector receives evaluation; transfer
+and simulation. Use enough independent starts and candidate-level scoring to make substantial serial stages use the agreed resources;
+do not duplicate trivial preparation or reporting work. Child fitting still waits for completed PhysiCell parent ranking. Every final vector receives evaluation; transfer
 agreement is descriptive, not a hard eligibility gate.
 
 For a generic adapter campaign, use `scripts/submit_campaign.py` with explicit task counts and commands. The prepared-baseline workflow

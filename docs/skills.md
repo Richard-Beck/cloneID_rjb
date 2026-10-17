@@ -57,8 +57,9 @@ requires SUM-159, hypoxia or two genomic states. A new hypothesis should identif
 
 The reusable runner is `scripts/run_baselines.py`, backed by the modelling skill's `scripts/baselines/` package and
 `examples/sum159/baseline.json`. Its default is a dry run; the example has scientific execution disabled. The first fresh attempt
-completed lineage fitting and stopped before perspective fitting because its competitive-parent prerequisite was unmet. See the
-example for the recorded outcome, local inputs and commands. Other model comparisons remain available when
+completed lineage fitting and stopped at a restrictive competitive-parent rule. The revised runner continues through scarce candidate
+pools and incomplete native evidence with explicit limitations, and widens parallel fitting under the agreed CPU cap. The new scratch
+run is being prepared. See the example for the recorded outcome, local inputs and commands. Other model comparisons remain available when
 requested; the historical stationary/constant/adaptation comparison is not the definition of these two baselines.
 
 A skill follows your requested scope. Explicitly agreed scientific choices and budgets carry forward; repeat approval is not required

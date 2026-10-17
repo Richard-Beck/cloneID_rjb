@@ -6,6 +6,7 @@ import numpy as np,pandas as pd
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from core import colony,fitting,assumptions,transfer
+import native_support as support
 PYTHON=sys.executable
 PARAMETERS=['xeq','speed','K','radius','rho0','m0','vinit','fG','oxygen_ratio','oxygen_half','oxygen_hill','G1_reference_rate','death_rate','dead_duration_hours','initial_dead_fraction']
 NATURAL_BOUNDS=np.array([[.55,.995],[.1,1e5],[.03,100],[3,120],[1e-6,.005],[1,1000],[.25,4],[.02,.98],[.01,100],[.001,100],[.01,100],[.1,24.],[1e-4,3.],[.25,72.],[1e-4,.75]])
@@ -63,17 +64,24 @@ def candidate(stage,index):return read(ROOT/(stage+'_candidates.json'))[index]
 def fit(stage,index):
  data=Data();c=candidate(stage,index);d=ROOT/'candidates'/c['id'];d.mkdir(parents=True,exist_ok=True);bounds=BOUNDS if stage=='shared' else np.tile(BOUNDS,(2,1));initial=np.asarray(c['initial']);rng=np.random.default_rng(c['seed'])
  rejected=0
- while rejected<25 and evaluate(data,initial,c['alpha'])['loss']>=1e24:
+ while rejected<25 and evaluate(data,initial,c['alpha']).get('invalid',False):
   initial=bounds[:,0]+rng.random(len(bounds))*np.diff(bounds,axis=1).ravel();rejected+=1
  write(d/'initialization.json',dict(candidate=c,rejected_invalid_initials=rejected,actual_initial=initial.tolist()))
- fitting.bounded_search(lambda x:evaluate(data,x,c['alpha']),initial,bounds,OPTIMIZER_SECONDS,d/'checkpoint.json')
+ def objective(x):
+  value=evaluate(data,x,c['alpha'])
+  return None if value.get('invalid',False) or value.get('valid') is False or not np.isfinite(value.get('loss',np.nan)) else value
+ fitting.bounded_search(objective,initial,bounds,OPTIMIZER_SECONDS,d/'checkpoint.json')
 
 def finalize(stage,index):
  c=candidate(stage,index);d=ROOT/'candidates'/c['id'];d.mkdir(parents=True,exist_ok=True)
  if not (d/'checkpoint.json').exists():write(d/'outcome.json',dict(candidate=c,status='missing_checkpoint'));return
  checkpoint=read(d/'checkpoint.json')
- if checkpoint['loss']>=1e24:write(d/'outcome.json',dict(candidate=c,status='invalid_checkpoint'));return
- data=Data();value=evaluate(data,np.array(checkpoint['x']),c['alpha']);value.update(candidate=c,x=checkpoint['x'],fit_evaluations=read(str(d/'checkpoint.json')+'.status.json')['evaluations']);write(d/'final.json',value)
+ if checkpoint.get('invalid',False) or checkpoint.get('valid') is False or not np.isfinite(checkpoint.get('loss',np.nan)):write(d/'outcome.json',dict(candidate=c,status='invalid_checkpoint'));return
+ data=Data();value=evaluate(data,np.array(checkpoint['x']),c['alpha'])
+ if value.get('invalid',False) or value.get('valid') is False or not np.isfinite(value.get('loss',np.nan)):write(d/'outcome.json',dict(candidate=c,status='invalid_final',evaluation=value));return
+ status_path=Path(str(d/'checkpoint.json')+'.status.json');optimizer_status=read(status_path) if status_path.exists() else None
+ evaluations=optimizer_status.get('evaluations') if optimizer_status is not None else checkpoint.get('evaluations')
+ value.update(candidate=c,x=checkpoint['x'],fit_evaluations=evaluations,fit_evaluations_basis='optimizer_status' if optimizer_status is not None else 'checkpoint_lower_bound' if evaluations is not None else 'unavailable',optimizer_status_unavailable=optimizer_status is None);write(d/'final.json',value)
  slots=[];plans=data.common_plans if stage=='shared' else data.plans
  for rep in range(REPLICATES):
   for p in plans:
@@ -85,57 +93,112 @@ def simulate(stage,index,slot_index):
  try:
   frozen=read(d/'final.json');slot=read(d/'slots.json')[slot_index];xx=vectors(frozen['x'])[slot['group_index']];shape=[1100,1400];scale=np.sqrt(1.5);domain=[shape[1]*scale,shape[0]*scale];crop=[-shape[1]/2,-shape[0]/2];times=np.array(slot['times_days'])*1440
   case=sd/'case';meta=transfer.export_case(case,np.exp(xx[:8]),rate(xx,slot['oxygen']),slot['seed'],times,domain,death_per_day=float(np.exp(xx[12])),dead_duration_hours=float(np.exp(xx[13])),initial_dead_fraction=float(np.exp(xx[14])))
-  engine=ENGINE;before=time.monotonic()
-  with (sd/'engine.log').open('w') as log:
-   done=subprocess.run([str(engine),'PhysiCell_settings.xml'],cwd=case,stdout=log,stderr=subprocess.STDOUT,timeout=TIMEOUT,env=dict(os.environ,OMP_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1',MKL_NUM_THREADS='1'))
-  result['engine_seconds']=time.monotonic()-before
-  if done.returncode:raise RuntimeError(f'Engine returncode{done.returncode}')
-  outputs=[]
-  for path in sorted((case/'output').glob('output*.xml')):
-   try:t=float(ET.parse(path).getroot().find('.//current_time').text);outputs.append((t,path))
-   except (ValueError,AttributeError):pass
-  if not outputs:raise RuntimeError('No timed simulator snapshots')
-  values=[];snapshots=[];measurement=time.monotonic()
-  for t in times:
-   actual,path=min(outputs,key=lambda a:abs(a[0]-t))
-   if abs(actual-t)>.500001:raise RuntimeError(f'No matchingtime{t},nearest{actual}')
-   v,m=transfer.snapshot(path,domain,shape,crop);values.append(v);snapshots.append(dict(requested_minutes=float(t),actual_minutes=actual,path=str(path.relative_to(ROOT)),metadata=m))
-  arr=np.array(values);np.savez_compressed(sd/'observables.npz',indices=np.array(slot['indices']),predicted=arr[np.array(slot['lookup'])],trajectory_predicted=arr,times_minutes=times)
-  result.update(status='complete',slot=slot,initialization=meta,snapshots=snapshots,measurement_seconds=time.monotonic()-measurement,domain_size=domain,field_shape=shape,crop_origin=crop)
+  before=time.monotonic();result['engine_status']='failed'
+  try:
+   with (sd/'engine.log').open('w') as log:
+    done=subprocess.run([str(ENGINE),'PhysiCell_settings.xml'],cwd=case,stdout=log,stderr=subprocess.STDOUT,timeout=TIMEOUT,env=dict(os.environ,OMP_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1',MKL_NUM_THREADS='1'))
+   result['engine_returncode']=done.returncode
+   if done.returncode:result['error']=f'Engine returncode {done.returncode}'
+   else:result['engine_status']='complete'
+  except subprocess.TimeoutExpired as error:result.update(engine_status='timed_out',error=repr(error))
+  except OSError as error:result['error']=repr(error)
+  result['engine_seconds']=time.monotonic()-before;measurement=time.monotonic()
+  arr,available,snapshots,parse_errors=support.measure_requested(case/'output',times,lambda path:transfer.snapshot(path,domain,shape,crop))
+  lookup=np.asarray(slot['lookup'],int);row_available=available[lookup];indices=np.asarray(slot['indices'],int)
+  np.savez_compressed(sd/'observables.npz',indices=indices[row_available],predicted=arr[lookup[row_available]],trajectory_predicted=arr,times_minutes=times,requested_indices=indices,requested_time_support=available)
+  complete=bool(available.all()) and bool(np.isfinite(arr).all()) and result['engine_status']=='complete'
+  result.update(status='complete' if complete else 'partial' if available.any() else 'failed',slot=slot,initialization=meta,snapshots=snapshots,snapshot_parse_errors=parse_errors,requested_snapshots=len(times),measured_snapshots=int(available.sum()),measurement_seconds=time.monotonic()-measurement,domain_size=domain,field_shape=shape,crop_origin=crop)
  except Exception as error:result.update(status='failed',error=repr(error),traceback=traceback.format_exc())
  result['wall_seconds']=time.monotonic()-started;write(sd/'outcome.json',result)
 
+
+def _score_evidence(c):
+ d=ROOT/'candidates'/c['id'];files={}
+ for relative in ['final.json','slots.json','final_provenance.json','attempt_identity.json']:
+  path=d/relative;files[relative]=support.file_sha(path) if path.exists() else None
+ if (d/'slots.json').exists():
+  for si,_ in enumerate(read(d/'slots.json')):
+   for name in ['outcome.json','observables.npz']:
+    relative=f'simulations/{si:03}/{name}';path=d/relative;files[relative]=support.file_sha(path) if path.exists() else None
+ return dict(candidate=c,files=files)
+
+
 def score_candidate(c):
- d=ROOT/'candidates'/c['id'];data=Data()
- if not (d/'final.json').exists():return dict(candidate=c,status='missing_final')
- final=read(d/'final.json');slots=read(d/'slots.json');pred=np.full((REPLICATES,data.n,30),np.nan);seen=np.zeros((REPLICATES,data.n),int);fail=[]
+ """Score one frozen candidate independently; always save its explicit outcome."""
+ d=ROOT/'candidates'/c['id'];d.mkdir(parents=True,exist_ok=True);evidence=_score_evidence(c)
+ result=dict(candidate=c,status='unavailable',ranking_score=None,ranking_basis='unavailable',score_evidence=evidence)
+ if not (d/'final.json').exists():result['reason']='missing_final';write(d/'score.json',result);return result
+ final=read(d/'final.json')
+ if final.get('invalid',False) or final.get('valid') is False or not np.isfinite(final.get('loss',np.nan)):
+  result.update(status='invalid',reason='invalid_final');write(d/'score.json',result);return result
+ result.update(x=final['x'],count_offset=COUNT_OFFSET,approximation_data_loss=final['data_loss'],assumption_penalty=final['assumption_penalty'],ridge_penalty=final['ridge_penalty'],parameter_difference=final['parameter_difference'],search_objective=final['loss'])
+ if not (d/'slots.json').exists():result['reason']='missing_slots';write(d/'score.json',result);return result
+ data=Data();slots=read(d/'slots.json');pred=np.full((REPLICATES,data.n,30),np.nan);seen=np.zeros((REPLICATES,data.n),int);fail=[];completed=0
  for si,slot in enumerate(slots):
-  sd=d/'simulations'/f'{si:03}'
-  if not (sd/'outcome.json').exists() or read(sd/'outcome.json')['status']!='complete':fail.append(si);continue
-  a=np.load(sd/'observables.npz');idx=a['indices'].astype(int);pred[slot['replicate'],idx]=a['predicted'];seen[slot['replicate'],idx]+=1
- if fail or np.any(seen!=1) or not np.isfinite(pred).all():return dict(candidate=c,status='incomplete_simulator_support',failed_slots=fail,completed_slots=len(slots)-len(fail),requested_slots=len(slots))
- reps=[];groups=[]
- for r in range(REPLICATES):
-  loss,b,parts=fitting.composite_score(pred[r],data.obs,data.scales,data.weights,COEF,offset=COUNT_OFFSET);gg={}
-  for g in ['2N','4N']:
-   w=data.weights.copy();w[data.groups!=g]=0;w*=2;gg[g]=fitting.composite_score(pred[r],data.obs,data.scales,w,COEF,offset=COUNT_OFFSET)[0]
-  reps.append(dict(replicate=r,data_loss=loss,weighted_components=parts.tolist(),group_losses=gg));groups.append(gg)
- loss=float(np.mean([r['data_loss'] for r in reps]));sd=float(np.std([r['data_loss'] for r in reps],ddof=1)) if REPLICATES>1 else 0.;parts=np.mean([r['weighted_components'] for r in reps],axis=0)
- result=dict(candidate=c,status='complete',x=final['x'],count_offset=COUNT_OFFSET,simulator_data_loss=loss,simulator_data_loss_seed_sd=sd,replicates=reps,approximation_data_loss=final['data_loss'],assumption_penalty=final['assumption_penalty'],ridge_penalty=final['ridge_penalty'],parameter_difference=final['parameter_difference'],simulator_penalized_loss=loss+final['ridge_penalty'],search_objective=final['loss'],simulator_components=parts.tolist(),group_losses={g:float(np.mean([v[g] for v in groups])) for g in ['2N','4N']})
- np.savez_compressed(d/'simulated.npz',predicted=pred.mean(axis=0),replicate_predicted=pred);write(d/'score.json',result);return result
+  sd=d/'simulations'/f'{si:03}';outcome=read(sd/'outcome.json') if (sd/'outcome.json').exists() else {}
+  if outcome.get('status')!='complete':fail.append(dict(slot_index=si,status=outcome.get('status','missing'),reason=outcome.get('error')))
+  else:completed+=1
+  if not (sd/'observables.npz').exists():continue
+  try:
+   with np.load(sd/'observables.npz') as values:
+    idx=values['indices'].astype(int);pp=values['predicted'];requested=np.asarray(slot['indices'],int)
+    if pp.shape!=(len(idx),30) or not np.isin(idx,requested).all() or len(np.unique(idx))!=len(idx):raise ValueError('Native observation support differs from frozen slot')
+    pred[slot['replicate'],idx]=pp;seen[slot['replicate'],idx]+=1
+  except (ValueError,KeyError,OSError) as error:fail.append(dict(slot_index=si,status='invalid_observables',reason=repr(error)))
+ reps=[];group_records=[]
+ for rep in range(REPLICATES):
+  q=support.score_support(pred[rep],data.obs,data.scales,data.weights,COEF,COUNT_OFFSET,fitting.composite_score,seen[rep]);gg={}
+  for group in ['2N','4N']:
+   weights=data.weights.copy();weights[data.groups!=group]=0;weights*=2
+   gg[group]=support.score_support(pred[rep],data.obs,data.scales,weights,COEF,COUNT_OFFSET,fitting.composite_score,seen[rep])
+  reps.append(dict(replicate=rep,data_loss=q['full_loss'],partial_data_loss=q['partial_loss'],ranking_data_loss=q['ranking_loss'],weighted_components=q['weighted_components'],native_support=q,group_losses={g:v['full_loss'] for g,v in gg.items()},partial_group_losses={g:v['partial_loss'] for g,v in gg.items()}));group_records.append(gg)
+ usable=[q for q in reps if q['ranking_data_loss'] is not None];complete=all(q['data_loss'] is not None for q in reps)
+ result.update(failed_slots=fail,completed_slots=completed,requested_slots=len(slots),replicates=reps,native_support=dict(replicates=[q['native_support'] for q in reps],complete=complete,supported_replicates=len(usable),requested_replicates=REPLICATES,weight_fraction=float(np.mean([q['native_support']['weight_fraction'] for q in reps]))))
+ if usable:
+  loss=float(np.mean([q['ranking_data_loss'] for q in usable]));sd=float(np.std([q['ranking_data_loss'] for q in usable],ddof=1)) if len(usable)>1 else 0. if complete else None;parts=np.mean([q['weighted_components'] for q in usable],axis=0).tolist()
+  result.update(status='complete' if complete else 'partial',ranking_score=loss,ranking_penalized_score=loss+final['ridge_penalty'],ranking_basis='native_full' if complete else 'native_partial_normalized')
+  if complete:
+   result.update(simulator_data_loss=loss,simulator_data_loss_seed_sd=sd,simulator_penalized_loss=loss+final['ridge_penalty'],simulator_components=parts,group_losses={g:float(np.mean([q[g]['full_loss'] for q in group_records])) for g in ['2N','4N']})
+  else:
+   result.update(partial_simulator_data_loss=loss,partial_simulator_data_loss_seed_sd=sd,partial_simulator_penalized_loss=loss+final['ridge_penalty'],partial_simulator_components=parts,partial_group_losses={g:float(np.mean([q[g]['ranking_loss'] for q in group_records if q[g]['ranking_loss'] is not None])) if any(q[g]['ranking_loss'] is not None for q in group_records) else None for g in ['2N','4N']})
+  # Never nanmean missing rows into apparently complete support.
+  np.savez_compressed(d/'simulated.npz',predicted=pred.mean(axis=0),replicate_predicted=pred,seen=seen)
+ result['ranking_evidence']=support.ranking_evidence(result)
+ write(d/'score.json',result);return result
+
+
+def score_candidate_worker(stage,index):
+ c=candidate(stage,index)
+ try:return score_candidate(c)
+ except Exception as error:
+  result=dict(candidate=c,status='unavailable',reason='candidate_scoring_failed',error=repr(error),traceback=traceback.format_exc(),ranking_score=None,ranking_basis='unavailable',score_evidence=_score_evidence(c))
+  write(ROOT/'candidates'/c['id']/'score.json',result);return result
+
+
+def _saved_score(c):
+ path=ROOT/'candidates'/c['id']/'score.json'
+ if not path.exists():return dict(candidate=c,status='unavailable',reason='missing_score_worker_record',ranking_score=None,ranking_basis='unavailable')
+ result=read(path)
+ if result.get('score_evidence')!=_score_evidence(c):raise ValueError('Candidate score frozen evidence mismatch: '+c['id'])
+ if result.get('candidate')!=c:raise ValueError('Candidate score identity mismatch: '+c['id'])
+ return result
+
 
 def score(stage):
- candidates=read(ROOT/(stage+'_candidates.json'));results=[score_candidate(c) for c in candidates];write(ROOT/(stage+'_scores.json'),results)
+ """Deterministically reduce saved candidate records; never rerun scoring here."""
+ candidates=read(ROOT/(stage+'_candidates.json'));results=[_saved_score(c) for c in candidates];write(ROOT/(stage+'_scores.json'),results)
+ good=[v for v in results if v.get('ranking_score') is not None and np.isfinite(v['ranking_score'])]
+ good.sort(key=support.ranking_key)
  if stage=='shared':
-  good=sorted([v for v in results if v['status']=='complete'],key=lambda v:(v['simulator_data_loss'],v['candidate']['id']))
-  if not good:raise RuntimeError('No fully scored sharedparent; ridgeblocked')
-  write(ROOT/'shared_best.json',good[0])
- else:
-  shared=read(ROOT/'shared_best.json');pool=[v for v in results if v['status']=='complete']+[shared];path=[];assigned=[]
-  for alpha in ALPHAS:
-   ranked=[]
-   for v in pool:
-    q=dict(v);q.update(evaluation_alpha=alpha,ridge_penalty=alpha*v['parameter_difference'],simulator_penalized_loss=v['simulator_data_loss']+alpha*v['parameter_difference']);ranked.append(q)
-   ranked.sort(key=lambda v:(v['simulator_penalized_loss'],v['candidate']['id']));path.append(dict(alpha=alpha,winner=ranked[0]))
-   local=[v for v in ranked if v['candidate']['stage']=='shared' or v['candidate']['alpha']==alpha];assigned.append(dict(alpha=alpha,winner=local[0]))
-  write(ROOT/'results.json',dict(shared_best=shared,ridge_path=assigned,pooled_path=path,shared_candidates=read(ROOT/'shared_scores.json'),ridge_candidates=results,parameter_names=PARAMETERS,natural_bounds=NATURAL_BOUNDS.tolist(),penalty='alpha * mean(((log(theta_2N)-log(theta_4N))/(log(upper)-log(lower)))^2)',count_offset='fixed commonlog1540000fieldarea; nofitcalibration',replicates=REPLICATES))
+  if good:write(ROOT/'shared_best.json',good[0])
+  else:write(ROOT/'shared_best.json',dict(status='unavailable',reason='no_finite_native_shared_parent',ranking_score=None,ranking_basis='unavailable'))
+  return
+ shared=read(ROOT/'shared_best.json') if (ROOT/'shared_best.json').exists() else dict(status='unavailable');pool=good+([shared] if shared.get('ranking_score') is not None else []);path=[];assigned=[]
+ for alpha in ALPHAS:
+  ranked=[]
+  for value in pool:
+   q=dict(value);penalty=alpha*value['parameter_difference'];q.update(evaluation_alpha=alpha,ridge_penalty=penalty,ranking_penalized_score=value['ranking_score']+penalty)
+   q['simulator_penalized_loss' if value.get('ranking_basis')=='native_full' else 'partial_simulator_penalized_loss']=value['ranking_score']+penalty;ranked.append(q)
+  ranked.sort(key=lambda value:support.ranking_key(value,value['ranking_penalized_score']));local=[v for v in ranked if v['candidate']['stage']=='shared' or v['candidate']['alpha']==alpha]
+  path.append(dict(alpha=alpha,winner=ranked[0] if ranked else None,status='available' if ranked else 'unavailable'));assigned.append(dict(alpha=alpha,winner=local[0] if local else None,status='available' if local else 'unavailable'))
+ write(ROOT/'results.json',dict(shared_best=shared,ridge_path=assigned,pooled_path=path,shared_candidates=read(ROOT/'shared_scores.json') if (ROOT/'shared_scores.json').exists() else [],ridge_candidates=results,parameter_names=PARAMETERS,natural_bounds=NATURAL_BOUNDS.tolist(),penalty='alpha * mean(((log(theta_2N)-log(theta_4N))/(log(upper)-log(lower)))^2)',count_offset='fixed common log1540000 field area; no fit calibration',replicates=REPLICATES))

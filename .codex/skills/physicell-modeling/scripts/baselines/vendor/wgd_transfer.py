@@ -18,6 +18,7 @@ from scipy.io import loadmat
 
 from core.colony import BASE, init_volume
 from core.transfer import snapshot
+import native_support as support
 
 ASSET_ROOT=Path(__file__).resolve().parents[1]/"assets/perspective"
 ENGINE=None
@@ -164,31 +165,58 @@ def read_cells(xml):
     return loadmat(xml.with_name(xml.stem+"_cells.mat"))["cells"],labels
 
 
+def read_trajectory(path):
+    """Retain complete numeric rows when the engine leaves a truncated CSV tail."""
+    frame=pd.read_csv(path)
+    required=['time_minutes','n_low','n_high','n_dead_low','n_dead_high','wgd_events']
+    if any(key not in frame for key in required):raise ValueError('Invalid native trajectory schema')
+    values=frame[required].apply(pd.to_numeric,errors='coerce').to_numpy(float)
+    keep=np.isfinite(values).all(axis=1)&(values>=0).all(axis=1)
+    frame=frame.loc[keep].copy()
+    if frame.empty:raise ValueError('No complete native trajectory rows')
+    frame[required]=values[keep]
+    if np.any(np.diff(frame.time_minutes.to_numpy())<0):raise ValueError('Native trajectory times are not ordered')
+    denominator=frame.n_low+frame.n_high
+    frame['f_high']=np.divide(frame.n_high,denominator,out=np.full(len(frame),np.nan),where=denominator>0)
+    return frame
+
+
 def execute(directory,spec,timeout_seconds=600,initial_override=None,pair_check=False,measure=True):
-    directory=Path(directory);start=time.monotonic()
-    metadata,times=export_case(directory,spec,initial_override)
-    command=[str(ENGINE),"PhysiCell_settings.xml"]
-    if pair_check:command.append("--pair-check")
-    outcome=dict(status="failure",initial=metadata,requested_times_days=spec["times_days"],sample_times_minutes=times.tolist())
+    directory=Path(directory);start=time.monotonic();outcome=dict(status='failure',engine_status='not_started',requested_times_days=spec['times_days'])
     try:
-        with open(directory/"engine.log","w") as log:
-            result=subprocess.run(command,cwd=directory,stdout=log,stderr=subprocess.STDOUT,timeout=timeout_seconds,
-                                   env={**os.environ,"OMP_NUM_THREADS":"1","OPENBLAS_NUM_THREADS":"1","MKL_NUM_THREADS":"1"})
-        if result.returncode:raise RuntimeError(f"Engine exit{result.returncode}")
-        outcome["status"]="success"
-        if not pair_check:
-            trajectory=pd.read_csv(directory/"state_trajectory.csv");denominator=trajectory.n_low+trajectory.n_high
-            trajectory["f_high"]=np.divide(trajectory.n_high,denominator,out=np.full(len(trajectory),np.nan),where=denominator>0)
-            trajectory.to_csv(directory/"state_trajectory.csv",index=False)
+        metadata,times=export_case(directory,spec,initial_override)
+        command=[str(ENGINE),'PhysiCell_settings.xml']
+        if pair_check:command.append('--pair-check')
+        outcome.update(initial=metadata,sample_times_minutes=times.tolist(),engine_status='failed')
+        try:
+            with open(directory/'engine.log','w') as log:
+                result=subprocess.run(command,cwd=directory,stdout=log,stderr=subprocess.STDOUT,timeout=timeout_seconds,
+                                      env={**os.environ,'OMP_NUM_THREADS':'1','OPENBLAS_NUM_THREADS':'1','MKL_NUM_THREADS':'1'})
+            outcome['engine_returncode']=result.returncode
+            if result.returncode:outcome['error']=f'Engine exit {result.returncode}'
+            else:outcome['engine_status']='complete'
+        except subprocess.TimeoutExpired as error:outcome.update(engine_status='timed_out',error=f'{type(error).__name__}: {error}')
+        except OSError as error:outcome['error']=f'{type(error).__name__}: {error}'
+        if pair_check:
+            outcome['status']='success' if outcome['engine_status']=='complete' else 'failure'
+        else:
+            trajectory=None
+            try:
+                trajectory=read_trajectory(directory/'state_trajectory.csv')
+                trajectory.to_csv(directory/'state_trajectory.csv',index=False)
+                outcome.update(trajectory_rows=len(trajectory),trajectory_first_time_minutes=float(trajectory.time_minutes.iloc[0]),trajectory_last_time_minutes=float(trajectory.time_minutes.iloc[-1]),terminal_low=int(trajectory.n_low.iloc[-1]),terminal_high=int(trajectory.n_high.iloc[-1]),terminal_dead_low=int(trajectory.n_dead_low.iloc[-1]),terminal_dead_high=int(trajectory.n_dead_high.iloc[-1]))
+            except (OSError,ValueError,pd.errors.ParserError) as error:outcome['trajectory_error']=repr(error)
+            all_measured=not measure;any_measured=False
             if measure:
-                values=[]
-                for index in range(len(times)):
-                    value,_=snapshot(directory/"output"/f"output{index:08d}.xml",spec["domain_size"],spec["field_shape"],spec["crop_origin"]);values.append(value)
-                np.savez_compressed(directory/"observables.npz",times_minutes=times,predicted=np.asarray(values),f_high=trajectory.f_high.to_numpy())
-            outcome["terminal_low"]=int(trajectory.n_low.iloc[-1]);outcome["terminal_high"]=int(trajectory.n_high.iloc[-1])
-            outcome["terminal_dead_low"]=int(trajectory.n_dead_low.iloc[-1]);outcome["terminal_dead_high"]=int(trajectory.n_dead_high.iloc[-1])
-    except Exception as error:
-        outcome["error"]=f"{type(error).__name__}: {error}"
-    outcome["wall_seconds"]=time.monotonic()-start;outcome["peak_rss_kib"]=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-    atomic_json(directory/"outcome.json",outcome)
+                values,available,records,parse_errors=support.measure_requested(directory/'output',times,lambda path:snapshot(path,spec['domain_size'],spec['field_shape'],spec['crop_origin']))
+                np.savez_compressed(directory/'observables.npz',times_minutes=times,predicted=values,requested_time_support=available,f_high=trajectory.f_high.to_numpy() if trajectory is not None else np.array([]))
+                outcome.update(snapshots=records,snapshot_parse_errors=parse_errors,requested_snapshots=len(times),measured_snapshots=int(available.sum()))
+                all_measured=bool(available.all()) and bool(np.isfinite(values).all());any_measured=bool(available.any())
+            endpoint_available=trajectory is not None and abs(float(trajectory.time_minutes.iloc[-1])-float(times[-1]))<=.500001
+            outcome['requested_terminal_time_available']=bool(endpoint_available)
+            complete=outcome['engine_status']=='complete' and endpoint_available and all_measured
+            outcome['status']='success' if complete else 'partial' if any_measured or trajectory is not None else 'failure'
+    except Exception as error:outcome['error']=f'{type(error).__name__}: {error}'
+    outcome['wall_seconds']=time.monotonic()-start;outcome['peak_rss_kib']=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    atomic_json(directory/'outcome.json',outcome)
     return outcome

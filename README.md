@@ -8,8 +8,8 @@ The repository tracks reusable workflow code, Codex skills, example configuratio
 derived measurements, the live laboratory-record knowledge base, full analysis runs and private provenance remain local.
 
 **Checkpoint status:** both pilots are complete and the [figure and calibration text](docs/u01_calibration_draft/latest/calibration.md)
-use those results. A fresh scripted attempt completed lineage fitting but stopped before perspective fitting: only one shared parent
-met the configured competitive cutoff, which requires two. See the [SUM-159 example](examples/sum159/README.md) for the outcome and the
+use those results. The first fresh attempt stopped at a restrictive parent-selection rule. The revised runner treats parent scarcity
+and incomplete native evidence as reported limitations, increases parallel search breadth, and is being prepared for a new scratch run. See the [SUM-159 example](examples/sum159/README.md) for the outcome and the
 [workflow](docs/workflow.md) for the fitting boundary and procedure.
 
 <!-- baseline-calibration:start -->

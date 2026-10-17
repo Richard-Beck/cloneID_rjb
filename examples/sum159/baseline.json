@@ -164,8 +164,8 @@
       "2N",
       "4N"
     ],
-    "shared_starts": 16,
-    "ridge_starts_per_alpha": 12,
+    "shared_starts": 512,
+    "ridge_starts_per_alpha": 100,
     "alphas": [
       0.0,
       1.0,
@@ -182,8 +182,11 @@
     "seed_native": 2026101600,
     "first_start_policy": "illustrative_parameters_with_prepared_early_count_density",
     "parent_competitive_window": 0.2,
-    "ridge_parent_other_policy": "competitive_maximin_then_best_fallback",
-    "native_timeout_seconds": 900
+    "ridge_parent_other_policy": "competitive_maximin_then_valid_other_then_best_fallback",
+    "native_timeout_seconds": 900,
+    "native_oxygen_priority": [
+      0.0
+    ]
   },
   "perspective": {
     "parameter_names": [
@@ -371,8 +374,8 @@
     "seed_search": 202610161906,
     "seed_native": 2026102000,
     "shared_parent_competitive_window": 0.2,
-    "minimum_competitive_shared_parents": 2,
-    "parent_selection": "first floor(N/2) best; remaining round-robin competitive simulator-ranked other shared parents",
+    "minimum_competitive_shared_parents": 1,
+    "parent_selection": "competitive full-native parents preferred; valid outside-window, partial-native, approximation or fresh-design fallback explicitly labeled; one valid parent is sufficient",
     "state_parameter_indices_from_lineage": [
       0,
       1,
@@ -421,28 +424,44 @@
       "finalist_competitive_absolute": 1.0,
       "finalist_diversity_pool_stop": 12,
       "native_stage_deadline_seconds": {
-        "screen": 7200,
-        "final_validation": 7200
+        "screen": null,
+        "final_validation": null
       },
-      "deadline_origin": "stage manifest preparation wall clock, including subsequent queue/dependency delay; individual cases also have native_timeout_seconds"
+      "deadline_origin": "No aggregate stage deadline; queue/dependency waiting does not consume scientific work. Individual cases retain native_timeout_seconds.",
+      "refinement_replicates": 8
     },
     "native_timeout_seconds": 480
   },
   "resources": {
-    "status": "PROVISIONAL, not launch authorization",
+    "status": "Restart sizing: 512 shared +500 ridge +1000 perspective fits; 8 bounded local starts/source; execution remains disabled in public example",
     "partition": "red",
     "qos": "large",
     "max_concurrent_cpus": 1000,
     "memory_mb_per_task": 3000,
     "fit_wall_minutes": 10,
     "finalize_wall_minutes": 5,
-    "native_wall_minutes": 20,
+    "native_wall_minutes": 45,
     "report_wall_minutes": 20,
     "report_cpu_hours_allowance": 1.0,
     "budget_cpu_hours_cap": null,
     "scheduler_probe_performed": false,
     "throttle_reason": "Future stream arrays exceeding agreed max_concurrent_cpus must share that cap; no independent arbitrary throttle.",
-    "scheduler_limits_verified": false
+    "scheduler_limits_verified": false,
+    "sizing": {
+      "expected_lineage_cpu_hours": 378,
+      "expected_total_cpu_hours": 513,
+      "lineage_elapsed_priority_minutes": 36.8,
+      "lineage_elapsed_native_wall_1_5x_minutes": 51.7,
+      "total_elapsed_queue_free_minutes_range": [
+        68,
+        85
+      ],
+      "expected_shared_fitting_busy_cpus": 493,
+      "expected_ridge_fitting_busy_cpus": 487,
+      "expected_refinement_cpus_up_to": 304,
+      "lineage_output_storage_gb_estimate": 300,
+      "estimate_basis": "Paired measured completed/stopped attempt durations, 0percent-oxygen-first scheduling replay; historical perspective timings, 8x bounded refinement. Estimates are not guarantees or CPU-hour caps."
+    }
   },
   "source_revision": {
     "origin": "Accepted 20261016_180145 lineage pilot and concluded 20261016_190611 perspective pilot; source adapted from the isolated91-check setup.",
