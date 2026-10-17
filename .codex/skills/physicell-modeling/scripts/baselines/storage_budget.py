@@ -56,13 +56,14 @@ def storage_plan(config,prepared=None):
 
 
 def inventory(roots,read_only_external_roots=()):
-    """Count unique files by device/inode; copied files remain distinct.
+    """Count allocated blocks by device/inode; copied files remain distinct.
 
     Resolve symlinks, refusing undeclared external targets unless explicitly
-    identified as existing read-only input/environment roots.
+    identified as existing read-only input/environment roots. Logical file
+    lengths are reported separately; unallocated sparse extents are not usage.
     """
     roots=[Path(p).resolve() for p in roots];readonly=[Path(p).resolve() for p in read_only_external_roots]
-    seen=set();pending=list(roots);result={'bytes':0,'allocated_bytes':0,'files':0,'directories':0,'symlinks':0,'dangling_symlinks':[],'excluded_read_only_targets':[],'roots':[str(p) for p in roots],'read_only_external_roots':[str(p) for p in readonly],'inventory_unix':time.time()}
+    seen=set();pending=list(roots);result={'bytes':0,'allocated_bytes':0,'logical_file_bytes':0,'accounting_basis':'allocated_blocks','files':0,'directories':0,'symlinks':0,'dangling_symlinks':[],'excluded_read_only_targets':[],'roots':[str(p) for p in roots],'read_only_external_roots':[str(p) for p in readonly],'inventory_unix':time.time()}
     def inside(path,base):
         try:path.relative_to(base);return True
         except ValueError:return False
@@ -79,7 +80,7 @@ def inventory(roots,read_only_external_roots=()):
         elif path.is_dir():
             result['directories']+=1;result['bytes']+=st.st_blocks*512;result['allocated_bytes']+=st.st_blocks*512;pending.extend(path.iterdir())
         elif path.is_file():
-            result['files']+=1;result['bytes']+=max(st.st_size,st.st_blocks*512);result['allocated_bytes']+=st.st_blocks*512
+            result['files']+=1;result['bytes']+=st.st_blocks*512;result['allocated_bytes']+=st.st_blocks*512;result['logical_file_bytes']+=st.st_size
     result['inventory_sha256']=hashlib.sha256(json.dumps(result,sort_keys=True).encode()).hexdigest()
     return result
 
@@ -191,6 +192,7 @@ def frozen_inventory(path,digest,roots,readonly,max_age_seconds=600,clock=time.t
     path=Path(path);blob=path.read_bytes()
     if not digest or hashlib.sha256(blob).hexdigest()!=digest:raise ValueError('Project inventory snapshot hash mismatch')
     value=json.loads(blob);age=clock()-value.get('inventory_unix',0)
+    if value.get('accounting_basis')!='allocated_blocks' or value.get('bytes')!=value.get('allocated_bytes'):raise ValueError('Project inventory must consistently measure allocated blocks')
     if not 0<=age<=min(600,max_age_seconds):raise ValueError('Project inventory snapshot is stale or future dated')
     if value.get('roots')!=[str(Path(p).resolve()) for p in roots] or value.get('read_only_external_roots',[])!=[str(Path(p).resolve()) for p in readonly]:raise ValueError('Project inventory ownership roots differ from snapshot')
     value.update(verified=True,snapshot_sha256=digest,snapshot_path=str(path),snapshot_age_seconds=age)
