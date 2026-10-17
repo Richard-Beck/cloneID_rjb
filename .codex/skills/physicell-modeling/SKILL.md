@@ -37,7 +37,8 @@ Read project-local resource rules and the user's current limits before substanti
 State any default assumptions to the user; explicit project or user budgets take precedence without another approval checkpoint.
 
 Budget durable data and peak transient output across the checkout, shared volumes, node-local scratch, caches and duplicate copies.
-A larger filesystem or symlink does not increase the allowance. Measure representative output bytes/inodes and reserve concurrent
+A larger filesystem or symlink does not increase the allowance. Count allocated blocks and file/directory overhead, not just logical
+payload bytes. Measure representative output bytes/inodes and reserve concurrent
 scratch before launch. Score and compact native outputs promptly; retain parameters, metrics, provenance, accounting and only the
 small selection of fields needed for reporting. Clean expendable raw outputs on success, failure and cancellation. Storage exhaustion
 or a time limit must still produce an honest partial report and cleanup. Follow the local retention budget after the task ends.

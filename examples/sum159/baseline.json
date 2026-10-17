@@ -480,7 +480,7 @@
     "durable_limit_bytes": 50000000000,
     "total_peak_limit_bytes": 100000000000,
     "existing_project_bytes_estimate": 12000000000,
-    "new_durable_bytes_reservation": 32000000000,
+    "new_durable_bytes_reservation": 36000000000,
     "report_reservation_bytes": 2000000000,
     "figure_reservation_bytes": 1000000000,
     "native_case_slots": 999,
@@ -523,7 +523,7 @@
       "final_passages": 118,
       "prepared_observation_rows": 343
     },
-    "metadata_reservation_bytes": 1900000000,
+    "metadata_reservation_bytes": 5900000000,
     "fit_attempt_max_bytes": 2000000,
     "figure_staging_reservation_bytes": 16000000000,
     "compact_case_final_bytes": 1376256

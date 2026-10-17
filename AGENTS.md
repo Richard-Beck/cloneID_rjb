@@ -25,6 +25,9 @@ GB means 1,000,000,000 bytes. Storage includes all project-created files: the ch
 archives and copies on shared or node-local storage. Symlinks and moving files to another volume do not remove them from this budget.
 Shared source data maintained independently of this project, such as CellSegmentations, are excluded; project-created copies count.
 
+Measure allocated filesystem blocks, including per-file and per-directory overhead, rather than only logical file lengths. Include
+this overhead in reservations; many small records can occupy much more space than their contents.
+
 Estimate current durable use, peak concurrent output and inode demand before launch. Use task-scoped scratch, bounded concurrency or
 disk reservations, and prompt measurement/compaction so simulations do not accumulate unbounded raw output. Retain compact prepared
 inputs, fitted parameters, scores, provenance, accounting and the small selection of fields needed for reporting. Remove expendable

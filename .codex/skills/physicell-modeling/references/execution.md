@@ -18,7 +18,8 @@ The bundled runtime handles custom initial phase/volume state, sampling and virt
 
 Resolve project-local disk and CPU limits first. Without explicit rules, state a 20 GB total storage cap and up to 32 cores for
 2 hours (64 CPU-hours). Explicit user/project budgets override these assumptions. Include existing project data and all external
-copies in the disk inventory; filesystem-wide free space is not proof of usable quota.
+copies in the disk inventory; filesystem-wide free space is not proof of usable quota. Use allocated blocks, including file and
+directory overhead, for both existing usage and output reservations. Measure small-file overhead on the destination filesystem.
 
 Before proposing budgets, run light timing smoke tests using baseline/default parameters at operating points drawn from observed
 field densities: include typical seeding, terminal harvest and the densest observed fields. Briefly initialize, burn in/relax,

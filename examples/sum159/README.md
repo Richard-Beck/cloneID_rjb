@@ -99,7 +99,8 @@ At 55 minutes after the allocated start job, the controller harvests saved evide
 
 Native frames are measured as they arrive and removed immediately. Compact metrics and selected report fields remain. Declared storage
 reservations cover all simultaneous workers, retained metrics, field staging and cleanup overlap. Actual retained project usage plus
-32 GB reserved for the new run must fit below the 50 GB durable limit before submission. New fitting starts from prepared data and fresh
+36 GB reserved for the new run, including measured filesystem allocation overhead, must fit below the 50 GB durable limit before
+submission. New fitting starts from prepared data and fresh
 parameters; it does not reuse canceled-run vectors. The final plan, input hashes and source identity are frozen before launch.
 
 Poor fits, missing native cases and scarce screen/finalist pools produce a result with explicit limitations rather than stopping solely

@@ -32,12 +32,19 @@ free space does not establish a user quota. A new run requires actual inventory 
 post-cleanup snapshot for at most 600 seconds during prepare/submit; `inventory_sha256` binds its exact bytes and ownership roots.
 Without that local option preflight inventories directly. The launch handoff must exclude unrelated new storage-producing work.
 
-The example reserves 32e9 durable growth: 22e9 compact native records, 1e9 selected field frames, 5e9 bounded fit records/traces,
-2e9 report, 50e6 cache/overhead and 1.9e9 metadata. The closed native case count is 14,984; the five capped compact files plus one
+The example reserves 36e9 durable growth: 22e9 compact native records, 1e9 selected field frames, 5e9 bounded fit records/traces,
+2e9 report, 50e6 cache/overhead and 5.9e9 metadata and physical allocation overhead. The closed native case count is 14,984; the five capped compact files plus one
 65,536-byte log total at most 1,376,256 bytes/case, or 20,621,819,904 bytes. All 2,104 fit/refinement attempts have a 2e6-byte
 envelope. An additional 623,120,256-byte allowance covers up to 999 interrupted compact atomic overlaps within the same 22e9 reservation.
 Configuration validation recomputes these bounds when counts change. The actual measured project footprint must leave
-32e9 bytes of durable headroom before launch; the planning estimate is 12e9 existing bytes.
+36e9 bytes of durable headroom before launch, so existing project allocation must be at most 14e9 bytes. The planning estimate is
+12e9 existing bytes; the actual post-cleanup inventory controls admission.
+
+The filesystem charges approximately 24–32 KiB per file beyond logical payload and 32 KiB per directory. The extra 4e9-byte allowance
+covers those physical charges for compact cases, fitted records, dispatch/worker accounting and combined scheduler logs. For scale,
+89,904 compact files can add 2.946e9 bytes at 32 KiB/file, 14,984 case directories add 0.491e9, and 56,565 dispatch/accounting/log files add
+1.390–1.854e9 before their small contents. Existing category buffers cover part of this overhead; the metadata/allocation allowance
+covers the remainder. Inventory counts allocated blocks for files, directories and symlinks, including targets on other owned volumes.
 
 Candidate fields awaiting ranking are temporary, with a separate 16e9-byte staging reservation. At most 1,932 recognized fields of
 8,000,064 bytes total 15,456,123,648 bytes; selected winners remain within the 1e9 durable field allowance and losing fields are deleted.
