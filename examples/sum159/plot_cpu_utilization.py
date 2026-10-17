@@ -92,9 +92,50 @@ def category(phase):
     }.get(phase, "Preparation, analysis and report")
 
 
+def recovery_metadata(run):
+    path = run / "recovery_jobs.json"
+    if not path.exists():
+        return {"jobs": []}
+    metadata = read_json(path)
+    if metadata.get("schema_version") != 1 or not isinstance(metadata.get("jobs"), list):
+        raise ValueError("Unsupported recovery_jobs.json schema")
+    return metadata
+
+
+def recovery_plan(run):
+    """Extend only the reporting DAG; the frozen scientific plan stays intact."""
+    plan = read_json(run / "scheduler/plan.json")
+    jobs = {name: str(job) for name, job in read_json(run / "scheduler/jobs.json").items()}
+    metadata = recovery_metadata(run)
+    for record in metadata["jobs"]:
+        name, job = record["node"], str(record["job_id"])
+        names = {node["name"] for node in plan["nodes"]}
+        after, before = record["depends_on_all"], record["required_before"]
+        if (not name or name in names or job in jobs.values() or not job.isdigit()
+                or not after or not before or len(set(after)) != len(after) or len(set(before)) != len(before)
+                or not set(after + before) <= names or set(after) & set(before)):
+            raise ValueError("Recovery job identity/dependencies are absent, duplicated or ambiguous")
+        position = max(index for index, node in enumerate(plan["nodes"]) if node["name"] in after) + 1
+        if any(index < position for index, node in enumerate(plan["nodes"]) if node["name"] in before):
+            raise ValueError("Recovery prerequisites contradict frozen stage order")
+        for node in plan["nodes"]:
+            if node["name"] in before:
+                node["depends_on_all"] = list(dict.fromkeys([*node.get("depends_on_all", []), name]))
+        plan["nodes"].insert(position, {"name": name, "kind": "command", "tasks": 1,
+                                      "depends_on_all": after, "recovery_job": True,
+                                      "recovery_reason": record.get("reason"),
+                                      "manifest_value": {"task_groups": [{"first": 0, "last": 0, "phase": "command",
+                                                                          "parent": None, "candidate": None}]}})
+        jobs[name] = job
+    if metadata["jobs"] and "total_array_tasks" in plan:
+        plan["original_total_array_tasks"] = plan["total_array_tasks"]
+        plan["total_array_tasks"] = sum(node["tasks"] for node in plan["nodes"])
+    return plan, jobs, metadata
+
+
 def collect(run, out, ancillary_jobs):
-    jobs = read_json(run / "scheduler/jobs.json")
-    ids = list(jobs.values()) + list(ancillary_jobs)
+    plan, jobs, recovery = recovery_plan(run)
+    ids = list(dict.fromkeys(list(jobs.values()) + list(ancillary_jobs)))
     command = ["sacct", "-j", ",".join(ids),
                "--format=JobID%100,JobIDRaw,State%40,AllocCPUS,ElapsedRaw,TotalCPU,Submit,Eligible,Start,End,ExitCode", "-P"]
     env = dict(os.environ, TZ="UTC", SLURM_TIME_FORMAT="standard")
@@ -104,6 +145,9 @@ def collect(run, out, ancillary_jobs):
         "collected_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
         "command": command, "environment": {"TZ": "UTC", "SLURM_TIME_FORMAT": "standard"},
         "ancillary_jobs": list(ancillary_jobs), "stderr": result.stderr,
+        "recovery_jobs": recovery,
+        "original_planned_tasks": sum(node["tasks"] for node in plan["nodes"] if not node.get("recovery_job")),
+        "registered_recovery_tasks": sum(node["tasks"] for node in plan["nodes"] if node.get("recovery_job")),
     })
 
 
@@ -183,8 +227,9 @@ def task_contexts(node):
 
 
 def normalize(run, raw_path, ancillary_jobs):
-    plan = read_json(run / "scheduler/plan.json")
-    jobs = read_json(run / "scheduler/jobs.json")
+    plan, jobs, recovery = recovery_plan(run)
+    if set(ancillary_jobs) & {str(record["job_id"]) for record in recovery["jobs"]}:
+        raise ValueError("Mid-campaign recovery cannot also be ancillary preflight")
     expected = {}
     node_keys = {}
     for node in plan["nodes"]:
@@ -203,6 +248,8 @@ def normalize(run, raw_path, ancillary_jobs):
                 "depends_on_all": node.get("depends_on_all", []),
                 "parallel_control": bool(node.get("parallel_control")),
                 "cleanup_only": bool(node.get("cleanup_only")),
+                "recovery_job": bool(node.get("recovery_job")),
+                "recovery_reason": node.get("recovery_reason"),
             }
             keys.append(key)
         node_keys[node["name"]] = keys
@@ -249,6 +296,9 @@ def normalize(run, raw_path, ancillary_jobs):
         "expected_tasks": len(expected), "accounted_task_rows": len(seen),
         "nonterminal_tasks": [t["key"] for t in expected.values() if t["state"] not in TERMINAL],
         "ancillary_rows": ancillary,
+        "recovery_jobs": recovery,
+        "original_planned_tasks": sum(node["tasks"] for node in plan["nodes"] if not node.get("recovery_job")),
+        "registered_recovery_tasks": sum(node["tasks"] for node in plan["nodes"] if node.get("recovery_job")),
     }
 
 
@@ -264,6 +314,7 @@ def budget_evidence(run, tasks):
         actions = actions.get("actions", [])
     proof = {}
     known_jobs = {str(job) for job in read_json(run / "scheduler/jobs.json").values()}
+    known_jobs.update(str(record["job_id"]) for record in recovery_metadata(run)["jobs"])
     for action in actions:
         argv, result = action.get("argv", []), action.get("result")
         if not argv or Path(str(argv[0])).name != "scancel":
@@ -859,6 +910,11 @@ def write_report(out, summary):
         elif control.get("method") == "fixed_unverified_controller":
             lines += ["Controller wait is unverifiable: " + control["reason"] + ". Its observed lifetime remains fixed as a labelled fallback; "
                       "that fallback can retain queue-dependent idle time in the adjusted view.", ""]
+    if summary.get("mid_campaign_recovery_tasks"):
+        lines += [f"The {summary['mid_campaign_recovery_tasks']:,} registered mid-campaign recovery jobs used "
+                  f"{summary['mid_campaign_recovery_cpu_hours']:.6f} CPU-hours, included in campaign totals. "
+                  "They retain their recorded predecessors and downstream gates in the replay, including late administrative submission. "
+                  "Original failed jobs remain included. Recovery is separate from initial preflight; local data repair is not assigned invented scheduler CPU.", ""]
     (out / "CPU_REPORT.md").write_text("\n".join(lines))
 
 
@@ -893,7 +949,66 @@ def self_test():
     sparse_fixture_test()
     selected_pool_fixture_test()
     controller_wait_fixture_test()
+    recovery_job_fixture_test()
     print("Replay checks passed: sparse slots, selected native sources/hashes, controller/worker caps, multi-parent cleanup, budget cancellation proof, CPU conservation and scientific status.")
+
+
+def recovery_job_fixture_test():
+    """A late reducer repair overlaps frozen ridge work and gates perspective."""
+    with tempfile.TemporaryDirectory(prefix="baseline_cpu_reducer_recovery_fixture_") as directory:
+        run = Path(directory)
+        (run / "scheduler").mkdir()
+        names = ["lineage_shared_score", "lineage_ridge_fit", "perspective_prepare"]
+        nodes = [{"name": name, "kind": "command", "tasks": 1, "depends_on": names[index - 1] if index else None,
+                  "manifest_value": {"task_groups": [{"first": 0, "last": 0, "phase": "command", "parent": None, "candidate": None}]}}
+                 for index, name in enumerate(names)]
+        write_json(run / "scheduler/plan.json", {"nodes": nodes, "total_array_tasks": 3})
+        write_json(run / "scheduler/jobs.json", dict(zip(names, ["1000", "1001", "1002"])))
+        original_hash = hashlib.sha256((run / "scheduler/plan.json").read_bytes()).hexdigest()
+        registry = {"schema_version": 1, "jobs": [{"job_id": "2000", "node": "lineage_shared_score_recovery",
+                     "depends_on_all": ["lineage_shared_score"], "required_before": ["perspective_prepare"],
+                     "reason": "Fixture metadata-only aggregation recovery; frozen ridge fits unchanged"}]}
+        write_json(run / "recovery_jobs.json", registry)
+        entries = [("1000", "FAILED", 0, 10, 12, 1.), ("1001", "COMPLETED", 0, 12, 22, 5.),
+                   ("1002", "COMPLETED", 0, 24, 25, .2), ("2000", "COMPLETED", 20, 20, 24, 2.),
+                   ("3000", "COMPLETED", 0, 1, 2, .1)]
+        raw = run / "accounting.psv"
+        iso = lambda value: f"2026-01-01T00:00:{value:02}"
+        with raw.open("w", newline="") as stream:
+            fields = ["JobID", "JobIDRaw", "State", "AllocCPUS", "ElapsedRaw", "TotalCPU", "Submit", "Eligible", "Start", "End", "ExitCode"]
+            writer = csv.DictWriter(stream, fieldnames=fields, delimiter="|")
+            writer.writeheader()
+            for key, state, submit, start, end, cpu in entries:
+                writer.writerow({"JobID": key, "JobIDRaw": key, "State": state, "AllocCPUS": 1,
+                                 "ElapsedRaw": end - start, "TotalCPU": cpu, "Submit": iso(submit), "Eligible": iso(start),
+                                 "Start": iso(start), "End": iso(end), "ExitCode": "0:0"})
+        tasks, plan, node_keys, coverage = normalize(run, raw, {"3000"})
+        assert coverage["expected_tasks"] == coverage["accounted_task_rows"] == 4
+        assert coverage["original_planned_tasks"] == 3 and coverage["registered_recovery_tasks"] == 1
+        assert len(coverage["ancillary_rows"]) == 1 and coverage["ancillary_rows"][0]["JobID"] == "3000"
+        by_key = {task["key"]: task for task in tasks}
+        assert by_key["1000"]["state"] == "FAILED" and by_key["1000"]["cpu_seconds"] == 1.
+        assert by_key["2000"]["recovery_job"] and by_key["2000"]["cpu_seconds"] == 2.
+        assert next(node for node in plan["nodes"] if node["name"] == "lineage_ridge_fit")["depends_on"] == "lineage_shared_score"
+        graph = make_graph(tasks, plan, node_keys)
+        assert graph["2000"]["dependencies"] == ["barrier:lineage_shared_score"] and graph["2000"]["release_delay"] == 8.
+        assert set(graph["1002"]["dependencies"]) == {"barrier:lineage_ridge_fit", "barrier:lineage_shared_score_recovery"}
+        adjusted = replay(graph, 2)
+        assert adjusted["1001"] == (2., 12.) and adjusted["2000"] == (10., 14.) and adjusted["1002"] == (14., 15.)
+        actual = {task["key"]: (task["start"], task["end"]) for task in tasks}
+        for times in [actual, adjusted]:
+            rows, zero = curve(tasks, times)
+            assert abs(integrate(rows, "estimated_busy_cpus") + zero - 8.2) < 1e-9
+            assert max(row["concurrent_task_cpus"] for row in rows) <= 2
+        assert hashlib.sha256((run / "scheduler/plan.json").read_bytes()).hexdigest() == original_hash
+        try:
+            normalize(run, raw, {"2000", "3000"})
+            raise AssertionError("Mid-campaign recovery was accepted as initial preflight")
+        except ValueError:
+            pass
+        (run / "recovery_jobs.json").unlink()
+        default_plan, default_jobs, default_metadata = recovery_plan(run)
+        assert len(default_plan["nodes"]) == len(default_jobs) == 3 and not default_metadata["jobs"]
 
 
 def controller_wait_fixture_test():
@@ -1254,6 +1369,11 @@ def main():
         "budget_janitor_outcome": budget.get("janitor_outcome.json"),
         "budget_controller_cpu_hours": sum(t.get("cpu_seconds", 0.) for t in tasks if t["node"] == "budget_controller") / 3600.,
         "budget_cleanup_cpu_hours": sum(t.get("cpu_seconds", 0.) for t in tasks if t["node"] == "budget_janitor") / 3600.,
+        "recovery_jobs": coverage["recovery_jobs"],
+        "original_planned_tasks": coverage["original_planned_tasks"],
+        "registered_recovery_tasks": coverage["registered_recovery_tasks"],
+        "mid_campaign_recovery_tasks": sum(bool(t.get("recovery_job")) for t in tasks),
+        "mid_campaign_recovery_cpu_hours": sum(t.get("cpu_seconds", 0.) for t in tasks if t.get("recovery_job")) / 3600.,
         "worker_cpu_hours": sum(t.get("cpu_seconds", 0.) for t in tasks if not t.get("parallel_control") and not t.get("cleanup_only")) / 3600.,
         "tasks": len(tasks), "task_states": dict(collections.Counter(t["state"] for t in tasks)),
         "actual_start_utc": dt.datetime.fromtimestamp(start, dt.timezone.utc).isoformat(),
