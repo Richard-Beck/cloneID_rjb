@@ -82,11 +82,11 @@
     },
     {
       "path": "storage_aware_mock.py",
-      "sha256": "d676a70baa820d29c29206f38d14aafc437af5a1fa4a2be26f386921e320d7f9"
+      "sha256": "87ba53ed603810ad2ae368fd3dd2620d363b575f2c82f9dce38fcfe5c7d8ba27"
     },
     {
       "path": "storage_budget.py",
-      "sha256": "b875b94bcaf32b1f8ae65c815ada822ca0957a47a1888cc31a5584228d3c43a1"
+      "sha256": "c940343f6484c31e3609e47dd0c9940180d1ca1c94d92f86841254c4f413dc04"
     },
     {
       "path": "synthetic_data.py",

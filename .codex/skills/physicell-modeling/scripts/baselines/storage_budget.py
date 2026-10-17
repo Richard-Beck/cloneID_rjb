@@ -62,7 +62,7 @@ def inventory(roots,read_only_external_roots=()):
     identified as existing read-only input/environment roots.
     """
     roots=[Path(p).resolve() for p in roots];readonly=[Path(p).resolve() for p in read_only_external_roots]
-    seen=set();pending=list(roots);result={'bytes':0,'allocated_bytes':0,'files':0,'directories':0,'symlinks':0,'excluded_read_only_targets':[],'roots':[str(p) for p in roots],'read_only_external_roots':[str(p) for p in readonly],'inventory_unix':time.time()}
+    seen=set();pending=list(roots);result={'bytes':0,'allocated_bytes':0,'files':0,'directories':0,'symlinks':0,'dangling_symlinks':[],'excluded_read_only_targets':[],'roots':[str(p) for p in roots],'read_only_external_roots':[str(p) for p in readonly],'inventory_unix':time.time()}
     def inside(path,base):
         try:path.relative_to(base);return True
         except ValueError:return False
@@ -72,7 +72,8 @@ def inventory(roots,read_only_external_roots=()):
         seen.add(key)
         if path.is_symlink():
             result['symlinks']+=1;result['bytes']+=st.st_blocks*512;result['allocated_bytes']+=st.st_blocks*512;target=path.resolve()
-            if any(inside(target,b) for b in roots):pending.append(target)
+            if not target.exists():result['dangling_symlinks'].append({'path':str(path),'target':str(target),'target_bytes':0})
+            elif any(inside(target,b) for b in roots):pending.append(target)
             elif any(inside(target,b) for b in readonly):result['excluded_read_only_targets'].append(str(target))
             else:raise ValueError('Uninventoried external project target: '+str(path)+' -> '+str(target))
         elif path.is_dir():

@@ -23,6 +23,9 @@ def run(out,stamp,config,check,expect_failure):
     check('unbounded_persistent_jit_cache_not_admitted',not st.storage_plan(changed)['valid'])
     root=out/'footprint';root.mkdir();(root/'a').write_bytes(b'input');os.link(root/'a',root/'hardlink');shutil.copy2(root/'a',root/'copy');(root/'link').symlink_to(root/'a')
     inv=st.inventory([root]);check('inventory_counts_copies_and_deduplicates_hardlinks',inv['files']==2 and inv['symlinks']==1 and inv['bytes']>=10)
+    dangling=root/'container_pandoc';dangling_target=out/'absent_container_software/pandoc';dangling.symlink_to(dangling_target)
+    inv=st.inventory([root]);entry=inv['dangling_symlinks'][0]
+    check('dangling_container_symlink_counts_inode_but_no_missing_target_bytes',inv['files']==2 and inv['symlinks']==2 and inv['bytes']>=dangling.lstat().st_blocks*512 and entry=={'path':str(dangling),'target':str(dangling_target),'target_bytes':0})
     invfile=out/'inventory.json';w.write(invfile,inv)
     loaded=st.frozen_inventory(invfile,w.sha(invfile),[root],[],clock=lambda:inv['inventory_unix']+1)
     check('inventory_snapshot_is_hash_bound_fresh_and_same_ownership',loaded['verified'] and loaded['snapshot_age_seconds']==1)
