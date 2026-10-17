@@ -1,0 +1,7 @@
+# Exact environment used for pixel-identical verification (Python 3.10.18).
+numpy==2.2.6
+scipy==1.15.3
+pandas==2.3.1
+Pillow==11.3.0
+scikit-image==0.25.2
+matplotlib==3.10.3

@@ -1,2 +1,3 @@
 .local/
+.rebuild/
 __pycache__/

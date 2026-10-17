@@ -4,8 +4,9 @@ This repository supports reproducible, agent-assisted research with cloneID data
 reconstruct cell-culture lineages from the cloneID database, connect those lineages to laboratory-notebook evidence, organize experimental
 instances and protocols, and fit mechanistic cell-growth models.
 
-The repository tracks reusable workflow code, Codex skills, example configuration and selected figures/text. Raw database snapshots,
-derived measurements, the live laboratory-record knowledge base, full analysis runs and private provenance remain local.
+The repository tracks reusable workflow code, Codex skills, example configuration, selected figures/text and the compact reporting data
+needed to rebuild the approved figure. Full analysis datasets, raw database snapshots, the live laboratory-record knowledge base and
+private provenance remain local.
 
 **Checkpoint status:** both pilots are complete and the [figure and calibration text](docs/u01_calibration_draft/latest/calibration.md)
 use those results. The first fresh attempt stopped at a restrictive parent-selection rule. The revised runner treats parent scarcity
@@ -24,6 +25,9 @@ We implemented a PhysiCell model and multimodal calibration workflow, piloted in
 
 **A two-stage workflow calibrates spatial models against longitudinal SUM-159 observations.** **A,** Recorded lineage and oxygen histories, with chromosome-sampling proxies; the highlighted 2N hypoxia 1 A18 passage links to E and F2. Hypoxia 1 and hypoxia 2 denote the two separately propagated hypoxia branches from each 2N/4N founder, following the oxygen series shown in A. **B,** Pooled single-cell chromosome counts, colored by the two genomic-state clusters. **C,** Measured CPU use for approximation guided inference, versus hypothetical PhysiCell-only inference. **D,** Living 4N fractions under hypoxia, with hypoxia 1 and hypoxia 2 trajectories, molecular observations (circles) and Wilson 95% intervals, and the dotted Lineage-guided reference. **E,** A Lineage-guided model example of measurements and distributions entering the weighted cost: total retained live + dead count (0.5), and dead count, coverage, relative area, gap and Clark–Evans organization (0.1 each). Count comparisons average two seeds; spatial illustrations use one seed and four observed fields. **F,** Four matched acquisition groups, each showing brightfield, segmentation and both models in representative snapshots covering 25% of each full field. Gold frames link the observed field, segmentation and Lineage-guided simulation to E. Fitted statistics use full fields. Scale bars, 100 pixels. Segmentation colors indicate living (green) and dead (orange) cells; model colors indicate 2N (blue), 4N (pink) and dead (orange).
 <!-- baseline-calibration:end -->
+
+The [3.55 MB figure data bundle](docs/u01_calibration_draft/latest/DATA_BUNDLE.md) rebuilds this approved figure without the local pilot
+directories. Rebuild commands and pinned dependencies are in the [figure README](docs/u01_calibration_draft/latest/README.md).
 
 ## High-level replication sequence
 
@@ -48,8 +52,9 @@ Imaging and segmentation inputs come only from **CellSegmentations**, including 
 set `CELLSEGMENTATIONS_ROOT=/share/lab_crd/CellSegmentations`; on the workstation, set it to the local mount. The detailed recursive
 manifest is distributed as an encrypted download, and its paths are relative to that root.
 
-Encrypted snapshots are stored as GitHub Release attachments and served through the static download page. Snapshot files, encryption
-passwords and plaintext data stay outside Git history; the repository tracks the packaging and publishing code.
+Encrypted snapshots are stored as GitHub Release attachments and served through the static download page. Download snapshots, encryption
+passwords and their full plaintext source datasets stay outside Git history. The approved figure's compact reporting bundle is included
+in Git.
 
 ## Instance/protocol database operating loop
 

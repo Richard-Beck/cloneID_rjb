@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "purpose": "Reporting-only minimal approved-figure evidence; no fitting initialization",
+  "files": [
+    {
+      "name": "F1_brightfield.png",
+      "bytes": 402683,
+      "sha256": "b8afd0ec95a72496f95a625e24f71a0c545070ef2acd0237294a1c550a28f590"
+    },
+    {
+      "name": "F1_segmentation.png",
+      "bytes": 128043,
+      "sha256": "581b0aa71e1b2fc0123ffd2b58b7da0f4e61d1570bc12b69a4de172fd7d87881"
+    },
+    {
+      "name": "F2_brightfield.png",
+      "bytes": 383575,
+      "sha256": "00bda492c6799cd4b743570c91a58fc46815f2ee1b4be10056cb395d4fd24f62"
+    },
+    {
+      "name": "F2_segmentation.png",
+      "bytes": 141925,
+      "sha256": "4f14b5d563576f718177c4622035067f4e60c2aa358cf19276b8f7f66425c91a"
+    },
+    {
+      "name": "F3_brightfield.png",
+      "bytes": 364436,
+      "sha256": "9f86c4c0085d452d4e72a382dfc0d1424fa332597a9cc1fb12bb9104f3cbe7bf"
+    },
+    {
+      "name": "F3_segmentation.png",
+      "bytes": 130487,
+      "sha256": "72591ac86f96e7e2a82ddd3d56163ca4e69504b1ed5e16292b52d276bac98500"
+    },
+    {
+      "name": "F4_brightfield.png",
+      "bytes": 330851,
+      "sha256": "c410b753a80fcef0fbd8216c508e771bf84422675c89a239402d7b3481dd5f42"
+    },
+    {
+      "name": "F4_segmentation.png",
+      "bytes": 95672,
+      "sha256": "e85cfdca119b0cad02ff6e40d1af385c7ffca2011aefb842bfaea3476c1593b7"
+    },
+    {
+      "name": "cells.npz",
+      "bytes": 268247,
+      "sha256": "f210ee8d764f5f37a1a2c268455de130e135768e3c55654b1f5e8b2ace21ee21"
+    },
+    {
+      "name": "compute_inputs.json",
+      "bytes": 10760,
+      "sha256": "bb4478bd84731f5c30cce02222394aff9f206f123a1a14ea61117a386b596658"
+    },
+    {
+      "name": "expected.json",
+      "bytes": 1794,
+      "sha256": "f36f8c05e38fdc581e9ba28cb5df8e6549bc1d2a3ea101232965b3874949bfa0"
+    },
+    {
+      "name": "numerics.npz",
+      "bytes": 1161087,
+      "sha256": "d99b81fa3489747dd41a5a58296f10ba10c7a100993951428868d1f219d772c3"
+    },
+    {
+      "name": "plot_data.json",
+      "bytes": 117218,
+      "sha256": "dbc30aca3089048aeb7bb344ff62d44e9fa3ca304f7fef86aaa19bc1a37f47ec"
+    }
+  ],
+  "sources": [
+    {
+      "campaign": "20261016_180145_sum159_total_count_shared_ridge",
+      "candidate": "ridge_0100_10",
+      "selection": "pooled alpha-100 winner"
+    },
+    {
+      "campaign": "20261016_190611_sum159_total_count_latent_state",
+      "candidate": "selected refined alpha-0 example",
+      "selection": "frozen fitted mixture; conditional native diagnostics"
+    }
+  ],
+  "source_artifact_hashes": [
+    {
+      "role": "Approved plotting source",
+      "sha256": "e9a4b7758041c69eec34bda595714280d2f848796fb37e2e344e51f05b0b96f3"
+    },
+    {
+      "role": "Original measured CPU projection source",
+      "sha256": "d8f2e2cf49661f8bebfdc06b47301b42ff52fee8af90ce43e0a70e5f3a1231f6"
+    },
+    {
+      "role": "Frozen measured CPU projection evidence",
+      "sha256": "ff3c7953a6748b33cf5e10f81e2794b76ff0566119eb9a303b9cc0f2a8f72e10"
+    },
+    {
+      "role": "Frozen prepared observation arrays",
+      "sha256": "081880e12313beeff4736b01afabb4f1b38fde3cc9dd1375bf3128ee0baf3da1"
+    },
+    {
+      "role": "Frozen prepared count/design rows",
+      "sha256": "11ddff76374417ed32d46ee36439eabe7f1446ed8766f1fdff671116a8cbbcd3"
+    },
+    {
+      "role": "Frozen prepared culture episodes",
+      "sha256": "09f95ed0112ec4f37e8e75833fd807ecbcca56f283b958b92d1ab872bba0c0ec"
+    },
+    {
+      "role": "Frozen chromosome assays",
+      "sha256": "2fe28d4b9846cdd2e38e4925ed66b4c6890172b754f9b489a54a27053c046bcb"
+    },
+    {
+      "role": "Observed full-field spatial distributions",
+      "sha256": "f96ea4ff4f682af2c33e87758c588cb9d92e8fe37635c955dd78cc299e67e81c"
+    },
+    {
+      "role": "Classified chromosome cell counts",
+      "sha256": "84faeafda796de2b0780367335b6def3dac34d74345c1f25c5b767f47166a164"
+    },
+    {
+      "role": "F1 saved brightfield display",
+      "sha256": "673d098f7eedc8999a980056e9c63fba68d8be6beaaa2616275ef925b4232d14"
+    },
+    {
+      "role": "F1 saved segmentation display",
+      "sha256": "de65db133c76544de96e41f9b328186b4d52421f28ecb0340e1aae6d5e2bbdaa"
+    },
+    {
+      "role": "F1 prepared observed geometry",
+      "sha256": "84177209cf466cc589c76894a15bda97d07deacbf5fb4f3437dadda6dd521d4b"
+    },
+    {
+      "role": "lineage_175 original snapshot header",
+      "sha256": "7f163e3c3177da435ad2759934dba3f477504879a54c37689f5e40d7b7e36940"
+    },
+    {
+      "role": "lineage_175 original cell matrix",
+      "sha256": "4b50c03c37526d93d63edced2871d4d8860362d2ed9cde62510fb4ea0d90052e"
+    },
+    {
+      "role": "perspective_175 original snapshot header",
+      "sha256": "3fe2ebb213f8b4ee54a5af9eeb85618de85f960fd36ee30bdc7c0e936bd0109f"
+    },
+    {
+      "role": "perspective_175 original cell matrix",
+      "sha256": "97ee2e6779f29a11a091c495740fdbcff9ccfd82ca4677ff4e6bfc4a8cfe3973"
+    },
+    {
+      "role": "F2 saved brightfield display",
+      "sha256": "4e27ec0d5496dbc5dd4bd1e58b6ba4a8368c3af1f19c9dfc95376404144c3d7f"
+    },
+    {
+      "role": "F2 saved segmentation display",
+      "sha256": "ae081157dc989fd1d2b4f8cc08ceda2c4e4d5d5f167ab384a247fbd0c34d6d7f"
+    },
+    {
+      "role": "F2 prepared observed geometry",
+      "sha256": "9d31c52ca25422ba5af8ee0ee78c544b58be692a9d68eb8462067991eb0fc563"
+    },
+    {
+      "role": "lineage_57 original snapshot header",
+      "sha256": "da74b0a8b72d45b937fe0a80f2e2bd4b5fd25a0086a006b5267d0d8584a9630c"
+    },
+    {
+      "role": "lineage_57 original cell matrix",
+      "sha256": "98a37988da20a4aa204a5975837063eab60bd2fb74ee46c9107be4649179d493"
+    },
+    {
+      "role": "perspective_57 original snapshot header",
+      "sha256": "e9b4c012b8185afa924ba2cc4f93e559471da46be0218a98e94fc6cbebfaa0f2"
+    },
+    {
+      "role": "perspective_57 original cell matrix",
+      "sha256": "88af49c06da7d7ce0e80bc062cb08a405f8af6cb715d2fbae1c26999e27f2137"
+    },
+    {
+      "role": "F3 saved brightfield display",
+      "sha256": "36eea8785bedd7312d02cad2fd12d17c2f9e9cf618e7c6bd63a9e9bc914bb9b8"
+    },
+    {
+      "role": "F3 saved segmentation display",
+      "sha256": "0d06617310b54abf466e647508033794d8d633614577bd293b011d2617eb2dc6"
+    },
+    {
+      "role": "F3 prepared observed geometry",
+      "sha256": "1f387835098ffa115f9cf13b7d19924925c978a12814aad9e6c7cab1ebb9b408"
+    },
+    {
+      "role": "lineage_342 original snapshot header",
+      "sha256": "2246d30ecb8a7ef22910566cb61f78cc61564d4d86c4c76262b3c029e7600943"
+    },
+    {
+      "role": "lineage_342 original cell matrix",
+      "sha256": "c6590b083f0aa881cef4fd7271572764dcac9ecef08809649fd2b347ad5254b4"
+    },
+    {
+      "role": "perspective_342 original snapshot header",
+      "sha256": "ed1b77ef400dc62506c6ab99019b141735f2f1c7076c7cd4e425200a04f73866"
+    },
+    {
+      "role": "perspective_342 original cell matrix",
+      "sha256": "e1f655d1c9d617ab80d9217fb44c3c05a9d4f352b18fbab4a28b32e9de3a3f0d"
+    },
+    {
+      "role": "F4 saved brightfield display",
+      "sha256": "c7ce5df7a5e216b2240ebec825800345a5b7130074162262c8374b4cd4bd3097"
+    },
+    {
+      "role": "F4 saved segmentation display",
+      "sha256": "cc9f3b2c35c97ad262b6893b565c6f9a9188e4373e22b2212ed5a59b1d94a8fe"
+    },
+    {
+      "role": "F4 prepared observed geometry",
+      "sha256": "e06d49697447f54b16aa801c14be4128ca539c623ca563d722e3ac1b75ecd79c"
+    },
+    {
+      "role": "lineage_234 original snapshot header",
+      "sha256": "34f0fe3b81f4589b06703f16359431ff11590d394b18bcb311e61196872788f9"
+    },
+    {
+      "role": "lineage_234 original cell matrix",
+      "sha256": "36d8c5443fed2e438e46462ce08cfbc482855928ea1ad33b682f77de87bb6610"
+    },
+    {
+      "role": "perspective_234 original snapshot header",
+      "sha256": "05bc55d338ec0659b508103b561317162965861cf712f1d8f3055b41994602d3"
+    },
+    {
+      "role": "perspective_234 original cell matrix",
+      "sha256": "f8d70a840f34d6250646a43c097312a36285cb2fde29cba212d69eb84fb79f74"
+    },
+    {
+      "role": "Lineage selected pooled-path result",
+      "sha256": "5632bc34a4756b05b55ce6faf79cc0f88c9dfb1f48fbc446e98c7db955cd7819"
+    },
+    {
+      "role": "Perspective selected frozen physical checkpoint",
+      "sha256": "6a8a764de471c34323a8632004e2114709f165c3ac30398e47565c24694cd735"
+    }
+  ],
+  "preparation": {
+    "lossless_observed_RGB": true,
+    "brightfield_scope": "Exact approved 700x550 crops plus full-field origins; full 1400x1100 segmentation and per-cell geometry retained",
+    "native_cell_fields": [
+      "x",
+      "y",
+      "total_volume",
+      "dead",
+      "current_state_if_present"
+    ],
+    "cell_float_precision": "Original float64; boolean/state codes are exact",
+    "field_shape_yx": [
+      1100,
+      1400
+    ],
+    "position_origin_xy": [
+      -700,
+      -550
+    ],
+    "simulated_domain_size_xy": [
+      1714.6428199482245,
+      1347.2193585307477
+    ],
+    "geometry_units": "position and display scale in pixels; volume in pixels^3; projected area in pixels^2",
+    "raw_source_access": false,
+    "fitted_parameters_reused_for_new_fits": false
+  },
+  "runtime_versions": {
+    "numpy": "2.2.6",
+    "scipy": "1.15.3",
+    "pandas": "2.3.1",
+    "Pillow": "11.3.0",
+    "scikit-image": "0.25.2",
+    "matplotlib": "3.10.3"
+  },
+  "archive_dependencies": false,
+  "pilot_directory_dependencies": false
+}

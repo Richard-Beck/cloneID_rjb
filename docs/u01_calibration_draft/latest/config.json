@@ -1,16 +1,15 @@
 {
-  "reference_inputs": ".local/reference_inputs",
   "output_stem": "baseline_multipanel",
   "render_alternative": false,
   "lineage": {
-    "campaign": "hypothesis_tests/20261016_180145_sum159_total_count_shared_ridge",
+    "campaign": "20261016_180145_sum159_total_count_shared_ridge",
     "candidate": "ridge_0100_10",
     "selection_alpha": 100.0,
     "status": "Accepted scratch fit",
     "count_schema": "total_dead"
   },
   "perspective": {
-    "campaign": "hypothesis_tests/20261016_190611_sum159_total_count_latent_state",
+    "campaign": "20261016_190611_sum159_total_count_latent_state",
     "candidate": "refined_no_wgd_0p0_072",
     "selection_alpha": 0.0,
     "status": "Concluded pilot example; frozen physical vector and correction, conditional native validation",
@@ -40,6 +39,5 @@
     11.5,
     7.0
   ],
-  "dpi": 240,
-  "projection_accounting": ".local/projection_perspective_accounting.psv"
+  "dpi": 240
 }

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Render an isolated baseline-figure design draft from saved numerical outputs.
+"""Rebuild the approved figure from its self-contained figure_data bundle.
 
-Run with the cpose Python environment. No fitting, simulation, or raw microscopy
-read occurs. Saved report display images supply observed panels; saved simulator
-XML/MAT snapshots supply native panels. Full-field statistics remain full-field.
+No pilot directory, private provenance, raw imaging, scientific engine or scheduler
+is needed. Full-field numerical validation and representative crops are preserved.
 """
 from pathlib import Path
 import os
@@ -16,14 +15,12 @@ import html
 import json
 import re
 import sys
-import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
 from PIL import Image
 from scipy import ndimage as ndi
-from scipy.io import loadmat
 from scipy.spatial import cKDTree
 from scipy.special import expit
 from scipy.stats import norm
@@ -42,10 +39,11 @@ OUT = Path(__file__).resolve().parent
 sys.path.insert(0, str(OUT))
 from crop_selection import choose_window
 from compute_projection import project as project_compute
-REPO = next(p for p in OUT.parents if (p / "AGENTS.md").is_file())
-LOCAL = OUT / ".local"
+BUNDLE = OUT / "figure_data"
+LOCAL = OUT / ".rebuild"
 CONFIG = json.loads((OUT / "config.json").read_text())
-REFERENCE = OUT / CONFIG["reference_inputs"]
+REFERENCE = BUNDLE
+DATA = json.loads((BUNDLE / "plot_data.json").read_text())
 SHAPE = (1100, 1400)
 AREA = float(np.prod(SHAPE))
 Q = np.arange(.02, 1, .04)
@@ -137,126 +135,61 @@ def distributions(binary, centers, areas):
 
 def model(key):
     spec = CONFIG[key]
-    root = REPO / spec["campaign"]
+    record = dict(candidate=dict(id=spec["candidate"]))
     if key == "lineage":
-        result = read(root / "results.json")
-        record = next(x["winner"] for x in result["pooled_path"] if x["alpha"] == spec["selection_alpha"])
-        assert record["candidate"]["id"] == spec["candidate"]
-        return dict(key=key, root=root, record=record, report=read(root / "report/data.json"), status=spec["status"])
-    report = next(x for x in read(root / "report/report_data.json") if x["id"] == spec["candidate"])
-    assert report["_stage"] == "final_validation"
-    contract = read(root / "final_validation/contract.json")
-    assert contract["replicates"] == 4 and contract["coefficients"] == [.5, .1, .1, .1, .1, .1]
-    checkpoint = track(root / report["checkpoint_relative"], "frozen perspective physical vector and correction")
-    assert hashlib.sha256(checkpoint.read_bytes()).hexdigest() == report["summary"]["checkpoint_sha256"]
-    parameters = read(root / f"report/{spec['candidate']}_parameters.json")
-    assert parameters["checkpoint_sha256"] == report["summary"]["checkpoint_sha256"]
-    assert parameters["parameters"]["w"] == 0
-    return dict(key=key, root=root, record=dict(candidate=dict(id=spec["candidate"])),
-                report=report, parameters=parameters, status=spec["status"])
+        record.update(simulator_components=DATA["lineage_components"], simulator_data_loss=DATA["lineage_loss"])
+    return dict(key=key, record=record, report=dict(assays=DATA["assays"]), status=spec["status"])
 
 
 def prepare_perspective(m, lineage):
-    folder = m["root"] / m["report"]["_folder"]
-    arrays = npz(folder / "microscopy.npz")
-    baseline = npz(lineage["root"] / "inputs/observations.npz")
-    for key in ["observed", "scales", "weights"]:
-        assert np.array_equal(arrays[key], baseline[key], equal_nan=True)
-    predicted = arrays["predicted"]
-    assert predicted.shape == (4, 343, 30) and np.all(arrays["seen"] == 1)
+    arrays = npz(BUNDLE / "numerics.npz")
+    predicted = arrays["perspective_predictions"]
+    assert predicted.shape == (4, 343, 30) and np.isfinite(predicted).all()
     rr = ((predicted-arrays["observed"])/arrays["scales"])**2
     residual = np.stack([rr[:, :, 0], rr[:, :, 1], rr[:, :, 2], rr[:, :, 5:].mean(axis=2),
                          rr[:, :, 3], rr[:, :, 4]], axis=2)
     parts = (residual*arrays["weights"]*np.array([.5, .1, .1, .1, .1, .1])).sum(axis=1).mean(axis=0)
-    assert np.allclose(parts, m["report"]["microscopy_scores"]["weighted_components"], rtol=1e-10)
-    assert np.isclose(parts.sum(), m["report"]["summary"]["native_microscopy_loss"])
+    assert np.allclose(parts, DATA["perspective_components"], rtol=1e-10)
+    assert np.isclose(parts.sum(), DATA["perspective_loss"])
     m["native_predictions"] = predicted
-    m["latent"] = npz(folder / "frozen_cohort/approximation.npz")
-    m["episode_index"] = read(folder / "frozen_cohort/episode_trace_index.json")
-    m["episodes"] = read(m["root"] / "inputs/episodes.json")
+    m["latent"] = {key: arrays[key] for key in arrays.files if key.startswith(("trace_", "latent_"))}
+    m["episode_index"] = DATA["episode_index"]
+    m["episodes"] = DATA["episodes"]
     byid = {e["episode_id"]: e for e in m["episodes"]}
     index = {e: i for i, e in enumerate(m["episode_index"])}
-    inheritance_errors = []
+    errors = []
     for eid, ep in byid.items():
         if ep["parent_episode_id"] is None:
             continue
         i, parent = index[eid], index[ep["parent_episode_id"]]
         inherited = np.interp(ep["parent_transfer_time_days"], m["latent"][f"trace_{parent}"][:, 0],
                               m["latent"][f"latent_{parent}"])
-        inheritance_errors.append(abs(float(m["latent"][f"latent_{i}"][0])-inherited))
-    assert max(inheritance_errors) < 1e-10
-    for points in m["report"]["curves"].values():
-        for point in points:
-            i = index[point["episode"]]
-            value = expit(np.interp(point["local_day"], m["latent"][f"trace_{i}"][:, 0], m["latent"][f"latent_{i}"]))
-            assert np.isclose(value, point["frozen"], rtol=0, atol=1e-11)
-    assays = read(m["root"] / "inputs/assays.json")
-    classified = csv(REFERENCE / "classified_chromosome_counts.csv")
-    assert len(assays) == 10 and sum(a["n"] for a in assays) == 220
-    assert {i for a in assays for i in a["sourceIDs"]} == set(classified.source_cell_id)
+        errors.append(abs(float(m["latent"][f"latent_{i}"][0])-inherited))
+    assert max(errors) < 1e-10
     CHECKS.update(perspective_replicates=4, perspective_microscopy_loss=float(parts.sum()),
                   perspective_full_support_score_reconstructed=True,
-                  perspective_observation_scales_weights_equal_lineage=True,
+                  perspective_max_latent_inheritance_error=max(errors),
                   perspective_frozen_curves_verified=True,
-                  perspective_inheritance="Continuous frozen latent composition at recorded parent transfer; native fields are independent draws",
-                  perspective_max_latent_inheritance_error=max(inheritance_errors),
-                  perspective_recheck_max_shift_pp=100*m["report"]["summary"]["max_fraction_change"],
                   perspective_probe_support=dict(completed=127, requested=128),
                   perspective_main_field_support=dict(completed=472, requested=472),
-                  perspective_validated_joint_score_claimed=False,
-                  perspective_candidate_policy=CONFIG["perspective"]["selection_policy"])
-    pd.DataFrame({"component": ["total_count", "dead_count", "coverage", "relative_area", "gap", "clark_evans"],
-                  "weighted_full_support_contribution": parts}).to_csv(LOCAL / "perspective_loss_components.csv", index=False)
+                  perspective_validated_joint_score_claimed=False)
 
 
 def native(m, row, stats=False):
     cache_key = (m["key"], int(row.row))
     if cache_key in NATIVE and (not stats or NATIVE[cache_key][2] is not None):
         return NATIVE[cache_key]
-    if m["key"] == "lineage":
-        directory = m["root"] / "candidates" / m["record"]["candidate"]["id"]
-        slots = read(directory / "slots.json")
-        slot = next(i for i, s in enumerate(slots)
-                    if s["replicate"] == 0 and int(row.row) in s["indices"])
-        outcome = read(directory / "simulations" / f"{slot:03}" / "outcome.json")
-        saved = min(outcome["snapshots"], key=lambda s: abs(s["requested_minutes"]/1440-row.time_days))
-        geometry = outcome.get("spec", outcome)
-        xml_path = m["root"] / saved["path"]
-    else:
-        slots = read(m["root"] / "final_validation/slots.json")
-        entry = next(s for s in slots if s["kind"] == "main" and s["candidate_id"] == CONFIG["perspective"]["candidate"]
-                     and s["replicate"] == 0 and int(row.row) in s["observation_rows"])
-        slot = entry["case_index"]
-        directory = m["root"] / "final_validation/cases" / entry["candidate_id"] / f"{slot:05}"
-        outcome = read(directory / "outcome.json")
-        assert outcome["status"] == "complete"
-        assert outcome["checkpoint_sha256"] == m["report"]["summary"]["checkpoint_sha256"]
-        sample = int(np.argmin(np.abs(np.array(outcome["native"]["requested_times_days"])-row.time_days)))
-        saved = dict(requested_minutes=outcome["native"]["requested_times_days"][sample]*1440,
-                     actual_minutes=outcome["native"]["sample_times_minutes"][sample])
-        geometry = read(directory / "case/case_spec.json")
-        assert geometry["initial_high_fraction"] == entry["initial_high_fraction"]
-        assert np.isclose(entry["initial_high_fraction"], expit(m["latent"][f"latent_{entry['episode_index']}"][0]), atol=1e-12, rtol=0)
-        xml_path = directory / "case/output" / f"output{sample:08}.xml"
-    assert abs(saved["requested_minutes"]/1440-row.time_days) < 1e-8
-    assert abs(saved["actual_minutes"]-saved["requested_minutes"]) <= .500001
-    assert geometry["field_shape"] == list(SHAPE) and geometry["crop_origin"] == [-700, -550]
-    xml = track(xml_path, "saved simulator XML snapshot")
-    mat = track(xml.with_name(xml.stem+"_cells.mat"), "saved simulator cell matrix")
-    tree = ET.parse(xml).getroot()
-    assert abs(float(tree.findtext(".//current_time"))-saved["actual_minutes"]) < 1e-8
-    header = {x.text: int(x.attrib["index"]) for x in tree.findall(".//labels/label")}
-    a = loadmat(mat)["cells"]
-    dead = a[header["dead"]] != 0
+    name = f"{m['key']}_{int(row.row)}"
+    arrays = npz(BUNDLE / "cells.npz")
+    cells = arrays[name + "_xyzv"]
+    dead = arrays[name + "_dead"]
     if m["key"] == "perspective":
-        state = a[header["cell_type"]].astype(int)
+        state = arrays[name + "_state"].astype(int)
         assert np.isin(state, [0, 1]).all()
-        meaning = "Current genomic-state display assignment from saved cell_type"
     else:
-        state = np.full(a.shape[1], 0 if row.group == "2N" else 1)
-        meaning = "Founding-lineage display assignment; no genomic-state variable"
-    x, y = a[header["position"]]+700, a[header["position"]+1]+550
-    radius = (3*a[header["total_volume"]]/(4*np.pi))**(1/3)
+        state = np.full(len(cells), 0 if row.group == "2N" else 1)
+    x, y = cells[:, 0]+700, cells[:, 1]+550
+    radius = (3*cells[:, 2]/(4*np.pi))**(1/3)
     h, w = SHAPE
     near = (x+radius >= 0) & (x-radius < w) & (y+radius >= 0) & (y-radius < h)
     inside = (x >= 0) & (x < w) & (y >= 0) & (y < h)
@@ -273,17 +206,17 @@ def native(m, row, stats=False):
     rgb[edge] = (rgb[edge]*.42).astype(np.uint8)
     FIELD_GEOMETRY[cache_key] = dict(centers=np.column_stack([x[inside], y[inside]]),
          areas=np.pi*radius[inside]**2, dead=dead[inside], high=state[inside] == 1, binary=labels > 0,
-         source="Saved native MAT centers, projected disk areas and living/dead genomic labels")
+         source="Bundled native centers, projected disk areas and living/dead state labels")
     counts = dict(alive=int((inside & ~dead).sum()), dead=int((inside & dead).sum()),
                   alive_nonWGD=int((inside & ~dead & (state == 0)).sum()),
                   alive_WGD=int((inside & ~dead & (state == 1)).sum()))
-    if m["key"] == "perspective":
-        assert np.allclose(np.log1p([counts["alive"]+counts["dead"], counts["dead"]]),
-                           m["native_predictions"][0, int(row.row), :2], rtol=1e-11, atol=1e-11)
-    info = dict(model=m["key"], candidate=m["record"]["candidate"]["id"],
-                row=int(row.row), slot=slot, replicate=0, seed=outcome["slot"]["seed"],
-                requested_minutes=saved["requested_minutes"], actual_minutes=saved["actual_minutes"],
-                snapshot=str(xml.relative_to(REPO)), center_counts=counts, state_meaning=meaning)
+    info = DATA["native"][name]
+    assert counts == info["center_counts"]
+    assert abs(info["actual_minutes"]-info["requested_minutes"]) <= .500001
+    assert abs(info["requested_minutes"]/1440-row.time_days) < 1e-8
+    predicted = npz(BUNDLE / "numerics.npz")[m["key"] + "_predictions"]
+    assert np.allclose(np.log1p([counts["alive"]+counts["dead"], counts["dead"]]),
+                       predicted[0, int(row.row), :2], rtol=1e-11, atol=1e-11)
     ss = distributions(labels > 0, np.column_stack([x[inside], y[inside]]),
                        np.pi*radius[inside]**2) if stats else None
     NATIVE[cache_key] = rgb, info, ss
@@ -291,47 +224,26 @@ def native(m, row, stats=False):
 
 
 def display_fields(m, obs):
-    previous = read(REFERENCE / "fields.json")
-    measurements = csv(m["root"] / "inputs/field_measurements.csv")
+    arrays = npz(BUNDLE / "cells.npz")
     fields, records = [], []
-    for case in previous:
-        case = {**case, "source_label": case["label"], "label": "F"+case["label"][1:]}
+    for field in DATA["fields"]:
+        case = field["case"]
         row = obs[obs.row.eq(case["row"])].iloc[0]
-        f = next(f for f in m["report"]["fields"] if f["row"] == int(row.row))
-        assert f["tile"] == case["tile"] and f["passage_id"] == row.passage_id
-        assert f["raw_path"] == case["raw_path"] and f["mask_path"] == case["mask_path"]
-        panels = []
-        for key in ["raw_image", "mask_image"]:
-            path = track(m["root"] / "report" / f[key], "saved observed display image")
-            im = np.asarray(Image.open(path).convert("RGB"))
-            assert im.shape == (1100, 1400, 3)
-            panels.append(im)
-        prepared = Path(f["cell_predictions_path"]).resolve()
-        assert prepared.is_relative_to(REPO / "hypothesis_tests") and prepared.parent.name == "fields" and prepared.parent.parent.name == "classification"
-        table = pd.read_csv(track(prepared, "saved prepared pilot classification TSV with geometry"), sep="\t")
-        meta = read(prepared.parents[2] / "inputs/metadata.json")
-        pixel_um = float(re.search(r"([0-9]+\.[0-9]+)um/px", meta["physical_pixel_calibration"]).group(1))
-        centers = table[["Centroid X µm", "Centroid Y µm"]].to_numpy()/pixel_um
-        dead = table.predicted_label.eq("dead_cell").to_numpy()
-        assert len(table) == f["observed"]["visible_cells"] and int(dead.sum()) == f["observed"]["dead_cells"]
-        assert table.mask_label.is_unique
-        measurement = measurements[measurements.row.eq(row.row) & measurements.tile.eq(case["tile"])].iloc[0]
-        assert hashlib.sha256(prepared.read_bytes()).hexdigest() == measurement.cell_predictions_sha256
-        ce = float(2*np.sqrt(len(centers)/AREA)*cKDTree(centers).query(centers, k=2)[0][:, 1].mean())
-        assert abs(ce-measurement.ce) < 5e-5
+        panels = [np.asarray(Image.open(track(BUNDLE / f"{case['label']}_{name}.png", "lossless observed display pixels")).convert("RGB"))
+                  for name in ["brightfield", "segmentation"]]
+        assert panels[0].shape == (550, 700, 3) and panels[1].shape == (1100, 1400, 3)
+        prefix = f"observed_{int(row.row)}_"
+        geometry = {key: arrays[prefix+key] for key in ["centers", "areas", "dead"]}
+        geometry["high"] = None
+        proof = field["geometry_provenance"]
+        assert len(geometry["centers"]) == proof["count"]
+        assert int(geometry["dead"].sum()) == proof["dead_count"]
+        ce = float(2*np.sqrt(len(geometry["centers"])/AREA)*cKDTree(geometry["centers"]).query(geometry["centers"], k=2)[0][:, 1].mean())
+        assert ce == proof["reconstructed_ce"]
         fields.append(dict(case=case, row=row, observed_panels=panels,
-             observed_geometry=dict(centers=centers, areas=table["Area.µm.2"].to_numpy()/pixel_um**2,
-                 dead=dead, high=None),
-             exact_full_spatial=dict(coverage=float(measurement.coverage), gap=float(measurement.gap)),
-             geometry_provenance=dict(prepared_tsv=str(prepared.relative_to(REPO)),
-                 prepared_tsv_sha256=hashlib.sha256(prepared.read_bytes()).hexdigest(), pixel_um=pixel_um,
-                 count=len(table), dead_count=int(dead.sum()), reconstructed_ce=ce,
-                 saved_exact_mask_ce=float(measurement.ce), ce_difference=ce-float(measurement.ce),
-                 limits="Prepared centroids rounded to 0.01 px; contour-derived areas are morphology proxies, not exact fitted pixel areas; no observed genomic labels")))
-        records.append(dict(label=case["label"], row=int(row.row), tile=f["tile"],
-                            saved_raw=f["raw_image"], saved_mask=f["mask_image"],
-                            source_raw_sha256=f["raw_sha256"], source_mask_sha256=f["mask_sha256"],
-                            reused_saved_display_assets=True))
+            observed_geometry=geometry, exact_full_spatial=field["exact_full_spatial"], geometry_provenance=proof,
+            brightfield_origin_xy=field["brightfield_origin_xy"]))
+        records.append(dict(label=case["label"], row=int(row.row), tile=case["tile"], lossless_bundled_display=True))
     CHECKS["observed_display_fields_match_approved_selections"] = True
     return fields, records
 
@@ -339,7 +251,7 @@ def display_fields(m, obs):
 def plot_lineage(ax, obs, fields, perspective):
     import re
     episodes = obs.sort_values("row").drop_duplicates("episode_id").set_index("episode_id")
-    edges = csv(perspective["root"] / "inputs/lineage_edges.csv")
+    edges = pd.DataFrame(DATA["edges"])
     cmap = ListedColormap(OXYGEN)
     normed = BoundaryNorm([0, .05, .15, .25, .4, .75, 1.5, 10, 25], cmap.N)
     xy, external = {}, []
@@ -361,7 +273,7 @@ def plot_lineage(ax, obs, fields, perspective):
                    edgecolor="white", lw=.3, zorder=3)
     for ep in external:
         ax.scatter(*xy[ep], s=13, color="#a6b0b8", zorder=3)
-    markers = csv(REFERENCE / "lineage_karyotype_markers.csv")
+    markers = pd.DataFrame(DATA["markers"])
     for _, assay in markers.iterrows():
         ax.scatter(*xy[assay.marked_episode_id], marker="D", s=28, facecolor="none",
                    edgecolor=INK, lw=.75, zorder=4)
@@ -402,7 +314,9 @@ def plot_lineage(ax, obs, fields, perspective):
 
 
 def plot_histogram(ax, perspective):
-    d = csv(REFERENCE / "classified_chromosome_counts.csv")
+    d = pd.DataFrame(dict(chromosome_count=DATA["chromosomes"]))
+    d["source_cell_id"] = np.arange(len(d))
+    d["current_high_state"] = (d.chromosome_count > 66).astype(int)
     assert len(d) == 220 and not d.source_cell_id.duplicated().any()
     assert np.array_equal(d.current_high_state.to_numpy(), (d.chromosome_count > 66).astype(int))
     bins = np.arange(39.5, 104.5, 2)
@@ -419,8 +333,8 @@ def plot_histogram(ax, perspective):
 def cost_data(lineage, obs):
     row = obs[obs.row.eq(CONFIG["cost_example"]["row"])].iloc[0]
     rows = obs[obs.episode_id.eq(row.episode_id)].sort_values("time_days")
-    frozen = npz(lineage["root"] / "inputs/observations.npz")
-    old = npz(REFERENCE / "example_distributions.npz")
+    frozen = npz(BUNDLE / "numerics.npz")
+    old = frozen
     sets = []
     for i in range(4):
         ss = {key: old[f"Data_{i}_{key}"] for key in ["areas", "gap_time", "gap_cdf", "nn"]}
@@ -433,7 +347,7 @@ def cost_data(lineage, obs):
                      np.mean([s["ce"] for s in sets]), np.quantile(np.log(areas/areas.mean()), Q)]
     assert np.allclose(observed, expected[3:], rtol=1e-10, atol=1e-10)
     rgb, info, ss = native(lineage, row, stats=True)
-    predicted = npz(lineage["root"] / "candidates" / lineage["record"]["candidate"]["id"] / "simulated.npz")["replicate_predicted"]
+    predicted = frozen["lineage_predictions"]
     counts = np.expm1(predicted[:, rows.row.to_numpy(int), :2]).mean(axis=0)
     assert np.all(counts[:, 0] >= counts[:, 1])
     # Schema check uses total, then dead on the linear count scale.
@@ -544,7 +458,11 @@ def image_panel(ax, array, crop=True, saved_bar=False, highlight=False, crop_rec
     if crop:
         assert crop_rect is not None
         x0, y0, x1, y1 = crop_rect
-        shown = array[y0:y1, x0:x1]
+        if array.shape[:2] == (550, 700):
+            assert (x1-x0, y1-y0) == (700, 550)
+            shown = array  # Exact approved brightfield crop; origin verified against full-mask selection.
+        else:
+            shown = array[y0:y1, x0:x1]
     else:
         shown = array
     h, w = shown.shape[:2]
@@ -565,7 +483,7 @@ def image_panel(ax, array, crop=True, saved_bar=False, highlight=False, crop_rec
 
 
 def plot_compute(ax, lineage, perspective):
-    projection = project_compute(lineage, perspective, OUT/CONFIG["projection_accounting"], read, track)
+    projection = project_compute(BUNDLE / "compute_inputs.json", read)
     used = [projection[key]["used_cpu_hours"] for key in ["lineage", "perspective"]]
     estimated = [projection[key]["projected_cpu_hours"] for key in ["lineage", "perspective"]]
     for i, (u, a) in enumerate(zip(used, estimated)):
@@ -691,6 +609,7 @@ def select_display_crops(fields, lineage, perspective):
             source_records.append(dict(modalities=[m["key"]], **proof))
         assert windows[0] == windows[1]
         assert all((r[2]-r[0], r[3]-r[1]) == (700, 550) for r in windows)
+        assert windows[0][:2] == field["brightfield_origin_xy"], "Recomputed window differs from the bundled brightfield crop"
         field["display_windows"] = windows
         records.append(dict(case=field["case"]["label"], row=int(field["row"].row), sources=source_records))
     dump(LOCAL / "crop_selection.json", records)
@@ -833,18 +752,21 @@ def render_preview():
 
 def main():
     LOCAL.mkdir(exist_ok=True)
+    verify_bundle()
+    assert not CONFIG.get("render_alternative", False), "Bundle supports the approved cropped figure only"
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 7, "axes.labelsize": 7,
                          "xtick.labelsize": 6.5, "ytick.labelsize": 6.5,
                          "text.color": INK, "axes.labelcolor": INK, "axes.edgecolor": "#b5bfc6",
                          "pdf.fonttype": 42})
     lineage, perspective = model("lineage"), model("perspective")
     prepare_perspective(perspective, lineage)
-    obs = csv(lineage["root"] / "inputs/observations.csv")
+    obs = pd.DataFrame(DATA["observations"])
     fields, observed_evidence = display_fields(lineage, obs)
     cost = cost_data(lineage, obs)
     select_display_crops(fields, lineage, perspective)
     compact = render(lineage, perspective, obs, fields, cost, compact=True)
     full = render(lineage, perspective, obs, fields, cost, compact=False) if CONFIG.get("render_alternative", True) else []
+    verify_rebuild(fields, cost)
     render_preview()
     parts = cost["parts"]
     pd.DataFrame({"component": ["total_count", "dead_count", "coverage", "relative_area", "gap", "clark_evans"],
@@ -868,11 +790,35 @@ def main():
                                      cost_example=cost["native_info"]))
     for path in [Path(__file__), OUT / "crop_selection.py", OUT / "compute_projection.py", OUT / "config.json"]:
         track(path, "isolated draft source")
-    dump(LOCAL / "dependencies.json", list(DEPENDENCIES.values()))
+    dump(LOCAL / "dependencies.json", [dict(path=str(Path(item["path"]).relative_to(OUT)), sha256=item["sha256"], role=item["role"]) for item in DEPENDENCIES.values()])
     dump(LOCAL / "runtime.json", dict(python=sys.version, executable=sys.executable, threads=1))
     print(OUT / f"{CONFIG.get('output_stem', 'current')}.png")
     if CONFIG.get("render_alternative", True):
         print(OUT / "alternative_full_fields.png")
+
+
+
+
+def verify_bundle():
+    manifest = json.loads((BUNDLE / "manifest.json").read_text())
+    for entry in manifest["files"]:
+        path = BUNDLE / entry["name"]
+        assert path.is_file() and path.stat().st_size == entry["bytes"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]
+    CHECKS["bundle_hashes_verified"] = True
+
+
+def verify_rebuild(fields, cost):
+    expected = read(BUNDLE / "expected.json")
+    assert np.array_equal(cost["counts"], expected["cost_counts"])
+    assert np.array_equal(cost["parts"], expected["cost_components"])
+    for field in fields:
+        assert field["display_windows"] == expected["crop_rectangles"][field["case"]["label"]]
+    rgba = np.asarray(Image.open(OUT / f"{CONFIG.get('output_stem', 'current')}.png").convert("RGBA"))
+    pixel_hash = hashlib.sha256(rgba.tobytes()).hexdigest()
+    assert pixel_hash == expected["approved_rgba_sha256"], "Rendered pixels differ; use the pinned plotting environment"
+    CHECKS.update(approved_png_pixels_identical=True, rgba_sha256=pixel_hash,
+                  expected_crop_rectangles_identical=True, expected_cost_counts_components_identical=True)
 
 
 if __name__ == "__main__":

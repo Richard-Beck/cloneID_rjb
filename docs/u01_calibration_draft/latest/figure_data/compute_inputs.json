@@ -1,0 +1,353 @@
+{
+  "method": "Fixed evaluation-budget replacement: retained measured CPU + sum(recorded analytical calls * mean matched complete-native-call CPU)",
+  "estimator": "Mean measured TotalCPU of complete native objectives; no CPU allocation enters the estimate",
+  "fixed_budget_caveat": "Same number of objective calls, not equal convergence, parameters, wall time or optimization trajectory",
+  "native_benchmark_caveat": "Benchmarks are optimized candidate checkpoints; costs elsewhere in the search can differ",
+  "perspective_closure_caveat": "One full-support native batch per call at frozen culture mixtures. Additional pure-native composition-history closure iterations, native correction fitting and analytical closure guidance without a measured pure-native counterpart are not priced; this is a conditional cost scenario, not a measured pure-native optimization",
+  "retained_cost_scope": "All recorded campaign CPU outside analytical exploratory/refinement fitting, including planned native checks and report jobs; local unscheduled work remains excluded",
+  "lineage": {
+    "used_cpu_hours": 34.0167,
+    "analytical_search_cpu_hours": 5.024740277777777,
+    "stages": [
+      {
+        "stage": "shared",
+        "objective_calls": 11789,
+        "full_observations": 343,
+        "native_replicates": 2,
+        "native_tasks_per_call": 16,
+        "benchmark": [
+          {
+            "candidate": "shared_001",
+            "cpu_hours": 0.15241277777777779,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_002",
+            "cpu_hours": 0.1510225,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_003",
+            "cpu_hours": 0.21450055555555558,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_004",
+            "cpu_hours": 0.24039194444444445,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_005",
+            "cpu_hours": 0.2440766666666667,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_006",
+            "cpu_hours": 0.1910902777777778,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_009",
+            "cpu_hours": 0.43008833333333335,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_010",
+            "cpu_hours": 0.14066333333333333,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_013",
+            "cpu_hours": 0.19340027777777777,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_014",
+            "cpu_hours": 0.17882222222222224,
+            "native_tasks": 16
+          },
+          {
+            "candidate": "shared_015",
+            "cpu_hours": 0.2708980555555556,
+            "native_tasks": 16
+          }
+        ]
+      },
+      {
+        "stage": "ridge",
+        "objective_calls": 22878,
+        "full_observations": 343,
+        "native_replicates": 2,
+        "native_tasks_per_call": 32,
+        "benchmark": [
+          {
+            "candidate": "ridge_0000_00",
+            "cpu_hours": 0.44787611111111103,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0000_01",
+            "cpu_hours": 0.4096038888888888,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0000_05",
+            "cpu_hours": 0.4431019444444444,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0000_06",
+            "cpu_hours": 0.6088777777777776,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0000_08",
+            "cpu_hours": 0.313545,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0000_10",
+            "cpu_hours": 0.47292027777777784,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0001_00",
+            "cpu_hours": 0.3957019444444445,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0001_02",
+            "cpu_hours": 0.4204122222222223,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0001_04",
+            "cpu_hours": 0.35452444444444453,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0001_06",
+            "cpu_hours": 0.4789077777777778,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0001_07",
+            "cpu_hours": 0.41539583333333335,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0001_08",
+            "cpu_hours": 0.32397111111111115,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0001_09",
+            "cpu_hours": 0.35405416666666667,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0001_10",
+            "cpu_hours": 0.45731750000000004,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_00",
+            "cpu_hours": 0.39962638888888874,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_01",
+            "cpu_hours": 0.3359397222222223,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_02",
+            "cpu_hours": 0.3547938888888889,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_06",
+            "cpu_hours": 0.4594786111111112,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_07",
+            "cpu_hours": 0.43005444444444446,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_08",
+            "cpu_hours": 0.3074294444444443,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_09",
+            "cpu_hours": 0.5217455555555556,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_10",
+            "cpu_hours": 0.27679277777777767,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0010_11",
+            "cpu_hours": 0.6084558333333333,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_00",
+            "cpu_hours": 0.39559305555555546,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_01",
+            "cpu_hours": 0.34462111111111104,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_02",
+            "cpu_hours": 0.37143,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_03",
+            "cpu_hours": 0.5086016666666666,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_04",
+            "cpu_hours": 0.3979411111111112,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_05",
+            "cpu_hours": 0.3106447222222223,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_06",
+            "cpu_hours": 0.48191888888888895,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_08",
+            "cpu_hours": 0.32030388888888883,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_09",
+            "cpu_hours": 0.5380422222222223,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_0100_10",
+            "cpu_hours": 0.38077249999999996,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_00",
+            "cpu_hours": 0.4021230555555556,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_01",
+            "cpu_hours": 0.35304277777777776,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_02",
+            "cpu_hours": 0.410208611111111,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_03",
+            "cpu_hours": 0.39749861111111107,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_04",
+            "cpu_hours": 0.2966222222222223,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_05",
+            "cpu_hours": 0.5181747222222223,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_06",
+            "cpu_hours": 0.4742330555555555,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_07",
+            "cpu_hours": 0.4078216666666666,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_08",
+            "cpu_hours": 0.31332138888888894,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_09",
+            "cpu_hours": 0.29862333333333335,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_10",
+            "cpu_hours": 0.6971588888888889,
+            "native_tasks": 32
+          },
+          {
+            "candidate": "ridge_1000_11",
+            "cpu_hours": 0.5459077777777779,
+            "native_tasks": 32
+          }
+        ]
+      }
+    ]
+  },
+  "perspective": {
+    "used_cpu_hours": 128.43165083333366,
+    "analytical_search_cpu_hours": 86.52365444444457,
+    "exploratory_calls": 53016,
+    "refinement_calls": 556,
+    "full_observations": 343,
+    "passages": 118,
+    "native_replicates": 4,
+    "benchmark": [
+      {
+        "candidate": "refined_no_wgd_0p1_028",
+        "main_cpu_hours": 2.458175833333329,
+        "probe_cpu_hours": 1.0667905555555552,
+        "cpu_hours": 3.524966388888884,
+        "main_cases": 472,
+        "probe_cases": 128,
+        "native_replicates": 4
+      },
+      {
+        "candidate": "refined_no_wgd_0p0_157",
+        "main_cpu_hours": 1.9815402777777777,
+        "probe_cpu_hours": 0.7377036111111107,
+        "cpu_hours": 2.7192438888888883,
+        "main_cases": 472,
+        "probe_cases": 128,
+        "native_replicates": 4
+      }
+    ],
+    "screening_support": {
+      "passages": 24,
+      "native_replicates": 2,
+      "main_cases": 48,
+      "probe_cases": 64,
+      "mean_cpu_hours_per_candidate": 0.7976307152777768,
+      "used_for_primary_projection": false
+    }
+  },
+  "expected_projection_cpu_hours": [
+    12144.14185010101,
+    167299.3244969443
+  ]
+}
