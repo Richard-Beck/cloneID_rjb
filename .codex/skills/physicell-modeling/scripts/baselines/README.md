@@ -59,6 +59,12 @@ the current run's `transient/`, acquire a reservation before export and release 
 so unfinished compact overlaps cannot accumulate outside the reserved count. These are finite ceilings rather than
 preallocated files; all project-created copies and cached bytes remain counted.
 
+Native slot reservations use a small `storage/state.json`; full inventory and field provenance live in `storage/inventory.json` and
+`storage/assets.json`. All readers and writers use the same reservation lock, including startup reads on shared filesystems. Detailed
+audits should use `storage_budget.ledger_snapshot(run)` to read the full, hash-checked view. This layout preserves the storage limits and
+failed-case reservations while avoiding full provenance rewrites for every native case. Initialize a fresh run; active ledgers cannot be
+converted in place.
+
 Both engines implement an output-only frame/acknowledgement protocol. A frame contains the actual sample time and full precision x,y,
 total_volume,dead,cell_type columns for at most the existing 200,000-cell guard:64+200000×5×8=8,000,064 bytes. The engine cannot advance to
 another snapshot until the current frame is measured, removed or moved into its reserved durable field asset, then acknowledged. The

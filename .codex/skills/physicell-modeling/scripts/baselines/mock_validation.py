@@ -127,6 +127,8 @@ def main(output=None):
     robust_mock.run(out,stamp,config,check,expect_failure)
     import storage_aware_mock
     storage_aware_mock.run(out,stamp,config,check,expect_failure)
+    import storage_ledger_mock
+    storage_ledger_mock.run(out,config,check)
     import budget_harvest_mock
     budget_harvest_mock.run(out,stamp,check,expect_failure)
     import portability_checks

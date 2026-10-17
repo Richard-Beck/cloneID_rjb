@@ -15,8 +15,9 @@ import time
 GB=10**9
 
 
-def write(path,value):
-    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
+def write(path,value,*,_parent_ready=False):
+    path=Path(path)
+    if not _parent_ready:path.parent.mkdir(parents=True,exist_ok=True)
     temp=path.with_name(path.name+f'.{os.getpid()}.tmp')
     temp.write_text(json.dumps(value,sort_keys=True,indent=2)+'\n');temp.replace(path)
 
@@ -85,29 +86,123 @@ def inventory(roots,read_only_external_roots=()):
     return result
 
 
+_READY_CACHE={}
+_LAYOUT='split_inventory_assets_v1'
+
+
+def _check_case_state(state,ready=None):
+    ref=state.get('asset_ledger',{})
+    if ref.get('layout')!=_LAYOUT or ref.get('record')!='assets.json' or ref.get('ready') is not True or not ref.get('ledger_id'):raise ValueError('Split storage ledger is not ready; initialize a fresh quiescent ledger')
+    if ready is not None and ref['ledger_id']!=ready['ledger_id']:raise ValueError('Storage ledger generation changed')
+    return state
+
+
+def _full_inventory(run,state):
+    summary=state['inventory']
+    if summary.get('record')!='inventory.json':raise ValueError('Invalid immutable inventory reference')
+    blob=(Path(run)/'storage/inventory.json').read_bytes()
+    if hashlib.sha256(blob).hexdigest()!=summary['record_sha256']:raise ValueError('Immutable inventory hash mismatch')
+    record=json.loads(blob)
+    if any(summary.get(k)!=record.get(k) for k in ['bytes','verified','inventory_sha256']):raise ValueError('Immutable inventory summary mismatch')
+    return record
+
+
+def _startup_check(run,force=False):
+    key=str(Path(run).absolute())
+    if not force and key in _READY_CACHE:return _READY_CACHE[key]
+    # The state and asset ledgers are atomically replaced by writers. Even a
+    # read-only startup open needs the same flock on NFS to avoid ESTALE and
+    # to verify one consistent generation. Shared startup readers may overlap.
+    run=Path(run)
+    with (run/'storage/reservations.lock').open('a+') as handle:
+        fcntl.flock(handle,fcntl.LOCK_SH)
+        state=_check_case_state(json.loads((run/'storage/state.json').read_text()))
+        _full_inventory(run,state)
+        ready={'ledger_id':state['asset_ledger']['ledger_id']}
+        _asset_state(run,ready)
+    if len(_READY_CACHE)>=16:_READY_CACHE.pop(next(iter(_READY_CACHE)))
+    _READY_CACHE[key]=ready;return ready
+
+
+def _case_state(run,ready):
+    return _check_case_state(json.loads((Path(run)/'storage/state.json').read_text()),ready)
+
+
+def _asset_state(run,ready):
+    state=json.loads((Path(run)/'storage/assets.json').read_text())
+    if state.get('layout')!=_LAYOUT or state.get('ledger_id')!=ready['ledger_id'] or not isinstance(state.get('field_assets'),dict):raise ValueError('Asset ledger generation or structure mismatch')
+    return state
+
+
+def inventory_record(run):
+    """Fresh audit hydration, with exact immutable inventory hash verification."""
+    run=Path(run)
+    with (run/'storage/reservations.lock').open('a+') as handle:
+        fcntl.flock(handle,fcntl.LOCK_SH)
+        state=_check_case_state(json.loads((run/'storage/state.json').read_text()))
+        return _full_inventory(run,state)
+
+
+def ledger_snapshot(run):
+    """Reconstruct the original full logical view under the same shared lock."""
+    run=Path(run)
+    with (run/'storage/reservations.lock').open('a+') as handle:
+        fcntl.flock(handle,fcntl.LOCK_SH)
+        state=_check_case_state(json.loads((run/'storage/state.json').read_text()))
+        full=dict(state,inventory=_full_inventory(run,state))
+        full['field_assets']=_asset_state(run,{'ledger_id':state['asset_ledger']['ledger_id']})['field_assets']
+        return full
+
+
 def initialize(run,config,inventory_record):
     run=Path(run);s=config['storage'];plan=storage_plan(config)
+    _READY_CACHE.pop(str(run.absolute()),None)  # Invalidate before any partial generation write.
     if not plan['valid']:raise ValueError('; '.join(plan['errors']))
     if inventory_record['bytes']+s['new_durable_bytes_reservation']>s['durable_limit_bytes']:raise ValueError('Actual project footprint leaves insufficient durable run/report headroom')
-    record={'inventory':inventory_record,'plan':plan,'native_active':{},'initialized_unix':time.time()}
-    write(run/'storage/state.json',record);write(run/'storage/plan.json',plan)
-    return record
+    (run/'storage').mkdir(parents=True,exist_ok=True)
+    with (run/'storage/reservations.lock').open('a+') as initialize_lock:
+        fcntl.flock(initialize_lock,fcntl.LOCK_EX)
+        # Initialization is pre-launch only. Never reset a nonempty original or split ledger.
+        previous=run/'storage/state.json'
+        if previous.exists():
+            old=json.loads(previous.read_text())
+            if old.get('native_active') or old.get('field_assets'):raise ValueError('Cannot replace a nonempty storage ledger')
+            if old.get('asset_ledger'):
+                ref=old['asset_ledger'];assets=_asset_state(run,{'ledger_id':ref['ledger_id']})
+                if assets['field_assets']:raise ValueError('Cannot replace a nonempty asset ledger')
+        path=run/'storage/inventory.json';blob=json.dumps(inventory_record,sort_keys=True,indent=2)+'\n';digest=hashlib.sha256(blob.encode()).hexdigest()
+        if path.exists():
+            if hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise ValueError('Immutable inventory already differs')
+        else:write(path,inventory_record)
+        summary={k:inventory_record[k] for k in ['bytes','verified','inventory_sha256'] if k in inventory_record}|{'record':'inventory.json','record_sha256':digest}
+        ledger_id=hashlib.sha256((str(run.absolute())+':'+digest+':'+str(time.time_ns())).encode()).hexdigest()
+        record={'inventory':summary,'plan':plan,'native_active':{},'initialized_unix':time.time(),'asset_ledger':{'layout':_LAYOUT,'record':'assets.json','ledger_id':ledger_id,'ready':True}}
+        # Publish an explicit unready marker before assets change. Even a cached old
+        # generation cannot admit work after interruption; readiness is committed last.
+        pending={**record,'asset_ledger':{**record['asset_ledger'],'ready':False}}
+        write(run/'storage/state.json',pending,_parent_ready=True)
+        write(run/'storage/assets.json',{'layout':_LAYOUT,'ledger_id':ledger_id,'field_assets':{}},_parent_ready=True)
+        write(run/'storage/plan.json',plan,_parent_ready=True)
+        write(run/'storage/state.json',record,_parent_ready=True)
+        _READY_CACHE.pop(str(run.absolute()),None)
+        return record
 
 
 @contextmanager
 def reserve_case(run,config,key,directory):
     """Reserve before export; release only after all transient bytes are removed."""
     run=Path(run);directory=Path(directory);s=config['storage'];root=run/'transient'
+    ready=_startup_check(run)
     root.mkdir(exist_ok=True)
     if directory.parent.resolve()!=root.resolve():raise ValueError('Transient native case must use the declared run transient root')
     lock=run/'storage/reservations.lock';lock.parent.mkdir(exist_ok=True)
     with lock.open('a+') as handle:
         fcntl.flock(handle,fcntl.LOCK_EX)
-        state=json.loads((run/'storage/state.json').read_text())
+        state=_case_state(run,ready)
         if key in state['native_active']:raise ValueError('Native disk reservation already active: '+key)
         if len(state['native_active'])>=s['native_case_slots']:raise ValueError('Native disk reservation slots exhausted; no simulation started')
         state['native_active'][key]={'directory':str(directory),'reserved_bytes':s['case_reservation_bytes'],'job_id':os.environ.get('SLURM_JOB_ID'),'pid':os.getpid(),'start_unix':time.time()}
-        write(run/'storage/state.json',state)
+        write(run/'storage/state.json',state,_parent_ready=True)
     failed=True
     try:
         lease={'completion_verified':True,'case_bytes':s['case_reservation_bytes'],'case_inodes':s['case_inode_limit'],'frame_bytes':s['frame_bytes'],'input_bytes':s['case_components_bytes']['initial_inputs'],'log_bytes':s['case_components_bytes']['logs'],'compact_bytes':s['compact_case_bytes'],'protocol_required':True}
@@ -118,11 +213,11 @@ def reserve_case(run,config,key,directory):
         if directory.exists():shutil.rmtree(directory)
         with lock.open('a+') as handle:
             fcntl.flock(handle,fcntl.LOCK_EX)
-            state=json.loads((run/'storage/state.json').read_text())
+            state=_case_state(run,ready)
             if failed:
                 state['native_active'][key].update(cleaned_transient=True,compact_finalization_unverified=True)
             else:state['native_active'].pop(key,None)
-            write(run/'storage/state.json',state)
+            write(run/'storage/state.json',state,_parent_ready=True)
 
 
 def cleanup_transient(run):
@@ -138,7 +233,7 @@ def cleanup_transient(run):
 
 def asset_callbacks(run,config):
     """Bound full-precision recognized fields independently of transient space."""
-    run=Path(run).resolve();limit=config['storage']['figure_staging_reservation_bytes']
+    run=Path(run).resolve();ready=_startup_check(run);limit=config['storage']['figure_staging_reservation_bytes']
     def reserve(size,path,provenance):
         path=Path(path).resolve()
         try:relative=path.relative_to(run)
@@ -146,30 +241,30 @@ def asset_callbacks(run,config):
         if relative.parts[0]=='transient' or size>config['storage']['frame_bytes']:raise ValueError('Invalid durable field asset')
         token=hashlib.sha256(str(relative).encode()).hexdigest()
         with (run/'storage/reservations.lock').open('a+') as handle:
-            fcntl.flock(handle,fcntl.LOCK_EX);state=json.loads((run/'storage/state.json').read_text());assets=state.setdefault('field_assets',{})
+            fcntl.flock(handle,fcntl.LOCK_EX);state=_asset_state(run,ready);assets=state.setdefault('field_assets',{})
             if token in assets:raise ValueError('Duplicate field asset reservation')
             if sum(v['bytes'] for v in assets.values())+size>limit:return False
-            assets[token]={'path':str(path),'relative_path':str(relative),'bytes':size,'status':'reserved','provenance':provenance};write(run/'storage/state.json',state)
+            assets[token]={'path':str(path),'relative_path':str(relative),'bytes':size,'status':'reserved','provenance':provenance};write(run/'storage/assets.json',state,_parent_ready=True)
         return token
     def commit(token,record):
         with (run/'storage/reservations.lock').open('a+') as handle:
-            fcntl.flock(handle,fcntl.LOCK_EX);state=json.loads((run/'storage/state.json').read_text());asset=state['field_assets'][token]
+            fcntl.flock(handle,fcntl.LOCK_EX);state=_asset_state(run,ready);asset=state['field_assets'][token]
             if Path(asset['path']).stat().st_size>asset['bytes']:raise ValueError('Field asset exceeds reservation')
-            asset.update(status='committed',record=record);write(run/'storage/state.json',state)
+            asset.update(status='committed',record=record);write(run/'storage/assets.json',state,_parent_ready=True)
     def release(token):
         if not token:return
         with (run/'storage/reservations.lock').open('a+') as handle:
-            fcntl.flock(handle,fcntl.LOCK_EX);state=json.loads((run/'storage/state.json').read_text());state.setdefault('field_assets',{}).pop(token,None);write(run/'storage/state.json',state)
+            fcntl.flock(handle,fcntl.LOCK_EX);state=_asset_state(run,ready);state.setdefault('field_assets',{}).pop(token,None);write(run/'storage/assets.json',state,_parent_ready=True)
     return reserve,commit,release
 
 
 def cleanup_unretained_assets(run,retained_paths):
     """After quiescence, close owned field leases even if a manifest write crashed."""
     import re
-    run=Path(run).resolve();retained={str(Path(name)) for name in retained_paths}
+    run=Path(run).resolve();ready=_startup_check(run,force=True);retained={str(Path(name)) for name in retained_paths}
     removed=[]
     with (run/'storage/reservations.lock').open('a+') as handle:
-        fcntl.flock(handle,fcntl.LOCK_EX);state=json.loads((run/'storage/state.json').read_text())
+        fcntl.flock(handle,fcntl.LOCK_EX);state=_asset_state(run,ready)
         assets=state.setdefault('field_assets',{})
         for token,asset in list(assets.items()):
             relative=asset['relative_path']
@@ -182,7 +277,7 @@ def cleanup_unretained_assets(run,retained_paths):
                 if path.stat().st_size>asset['bytes'] or record.get('sha256',digest)!=digest:raise ValueError('Orphan field differs from its reservation')
                 path.unlink();removed.append({'path':relative,'sha256':digest,'bytes':asset['bytes'],'prior_status':asset['status']})
             assets.pop(token)
-        write(run/'storage/state.json',state)
+        write(run/'storage/assets.json',state,_parent_ready=True)
     result={'removed':removed,'retained_paths':sorted(retained),'quiescent_only':True,'numeric_evidence_removed':False}
     write(run/'storage/orphan_field_cleanup.json',result);return result
 

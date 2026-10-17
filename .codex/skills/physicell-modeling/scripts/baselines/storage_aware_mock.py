@@ -60,11 +60,11 @@ def run(out,stamp,config,check,expect_failure):
     except RuntimeError:pass
     check('worker_failure_deletes_raw_but_preserves_compact_overlap_reservation',not case.exists() and w.read(test/'storage/state.json')['native_active']['one']['compact_finalization_unverified'])
     reserve,commit,release=st.asset_callbacks(test,local);asset=test/'field_frame_0.bin';asset.write_bytes(b'precise');token=reserve(7,asset,{'synthetic':True});commit(token,{'sha256':w.sha(asset)});release(token)
-    check('field_asset_lease_tracks_exact_bytes',not w.read(test/'storage/state.json')['field_assets'])
+    check('field_asset_lease_tracks_exact_bytes',not st.ledger_snapshot(test)['field_assets'])
     orphan=test/'field_frame_0001.bin';orphan.write_bytes(b'owned');token=reserve(5,orphan,{'synthetic':True})
     unrelated=test/'unrelated.bin';unrelated.write_bytes(b'keep')
     st.cleanup_unretained_assets(test,[])
-    check('janitor_closes_unmanifested_owned_field_without_touching_unrelated_files',not orphan.exists() and unrelated.exists() and not w.read(test/'storage/state.json')['field_assets'])
+    check('janitor_closes_unmanifested_owned_field_without_touching_unrelated_files',not orphan.exists() and unrelated.exists() and not st.ledger_snapshot(test)['field_assets'])
     closed=test/'transient/closed_check'
     with st.reserve_case(test,{**local,'storage':{**local['storage'],'native_case_slots':2}},'closed_check',closed) as lease:lease['completion_verified']=False
     check('normally_caught_wrapper_failure_retains_unclosed_compact_lease',w.read(test/'storage/state.json')['native_active']['closed_check']['compact_finalization_unverified'])
