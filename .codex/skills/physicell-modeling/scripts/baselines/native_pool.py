@@ -42,7 +42,7 @@ def select(run,config,stage):
         for name in ['final.json','slots.json','final_provenance.json','attempt_identity.json']:files[name]=sha(folder/name) if (folder/name).exists() else None
         if (folder/'slots.json').exists():
             for i,_ in enumerate(read(folder/'slots.json')):
-                for name in ['outcome.json','observables.npz']:files[f'simulations/{i:03}/{name}']=None
+                for name in ['outcome.json','observables.npz','stream_identity.json']:files[f'simulations/{i:03}/{name}']=None
         final=read(folder/'final.json') if (folder/'final.json').exists() else {}
         w.write(folder/'score.json',{'candidate':c,'status':'not_native_selected','ranking_score':None,'ranking_basis':'unvalidated_approximation','reason':'Bounded best-plus-diverse native allocation; not a failed scientific simulation','approximation_data_loss':final.get('data_loss'),'assumption_penalty':final.get('assumption_penalty'),'search_objective':final.get('loss'),'x':final.get('x'),'score_evidence':{'candidate':c,'files':files}})
     w.write(destination,selected);w.write(root/(stage+'_native_selection.json'),{'stage':stage,'run_id':identity['run_id'],'input_manifest_sha256':input_hash,'pool_manifest_sha256':sha(destination),'policy':pool,'selected':selected,'groups':audits,'unavailable_fits':unavailable,'candidate_manifest_sha256':sha(root/(stage+'_candidates.json')),'native_evaluations_not_run_for_unselected':True,'historical_parameter_reuse':False})

@@ -62,7 +62,7 @@
     },
     {
       "path": "native_pool.py",
-      "sha256": "9df34b13651b7d355a159455ef3ff9720de98b12e55bc6791494368be9cdd24d"
+      "sha256": "dc3e1579d454c050159a8e8ce5656ea925b2085a51d89ed4594fffa76f67d8ff"
     },
     {
       "path": "portability_checks.py",
@@ -166,7 +166,7 @@
     },
     {
       "path": "vendor/native_support_mock.py",
-      "sha256": "2b91bdffa1c938e1b29684094ae2ba9b5ce143afa3a87978fbee07fc0e3d414c"
+      "sha256": "8433183807639d87824d8cbe53d8d6ffb08499beecb7409705fc1b7e79893366"
     },
     {
       "path": "vendor/perspective_model.py",

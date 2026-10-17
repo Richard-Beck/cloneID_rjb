@@ -41,6 +41,58 @@ class SupportChecks(unittest.TestCase):
     def score(self,p,**kwargs):
         d=self.data
         return support.score_support(p,d.obs,d.scales,d.weights,self.coef,1.,fitting.composite_score,**kwargs)
+    def test_selected_native_and_unselected_placeholder_evidence_share_reducer_contract(self):
+        # Nonempty slots reproduce the real reducer failure; the old empty-slot
+        # native-allocation fixture could not expose a missing absent-file key.
+        import sys
+        sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+        import native_pool
+        with tempfile.TemporaryDirectory() as temporary:
+            run=Path(temporary);root=run/'lineage';candidates=[]
+            dump(run/'run_identity.json',dict(run_id='fresh_synthetic'))
+            dump(run/'input_manifest.json',dict(synthetic=True))
+            for index in range(3):
+                candidate=dict(id=f'shared_{index:04}',stage='shared',alpha=0.)
+                candidates.append(candidate);folder=root/'candidates'/candidate['id']
+                value=dict(x=(np.mean(lineage.BOUNDS,axis=1)+index*.01).tolist(),loss=1.+index,data_loss=1.+index,assumption_penalty=0.,ridge_penalty=0.,parameter_difference=0.)
+                dump(folder/'final.json',value)
+                dump(folder/'slots.json',[dict(indices=[i],replicate=0) for i in range(2)])
+                dump(folder/'final_provenance.json',dict(run_id='fresh_synthetic',candidate_id=candidate['id'],input_manifest_sha256=support.file_sha(run/'input_manifest.json'),final_sha256=support.file_sha(folder/'final.json')))
+            dump(root/'shared_candidates.json',candidates)
+            config=dict(lineage=dict(native_pool=dict(shared=2,best_fraction=.5),natural_bounds=lineage.NATURAL_BOUNDS.tolist()))
+            pool=native_pool.select(run,config,'shared')
+            self.assertEqual([item['candidate_id'] for item in pool],['shared_0000','shared_0002'])
+            with patch.object(lineage,'ROOT',root),patch.object(lineage,'REPLICATES',1),patch.object(lineage,'Data',return_value=self.data),patch.object(lineage,'evaluate',side_effect=AssertionError('No model evaluation')),patch.object(fitting,'bounded_search',side_effect=AssertionError('No fit')),patch.object(lineage.native_stream,'execute',side_effect=AssertionError('No native execution')):
+                for item in pool:
+                    candidate=candidates[item['candidate_index']];folder=root/'candidates'/candidate['id']
+                    self.assertFalse((folder/'score.json').exists())
+                    for index in range(2):
+                        directory=folder/'simulations'/f'{index:03}'
+                        dump(directory/'outcome.json',dict(status='complete',synthetic=True))
+                        dump(directory/'stream_identity.json',dict(synthetic=True,slot_index=index))
+                        np.savez_compressed(directory/'observables.npz',indices=np.array([index]),predicted=np.zeros((1,30)))
+                    result=lineage.score_candidate(candidate)
+                    self.assertEqual(result['status'],'complete')
+                    self.assertEqual(result['score_evidence'],lineage._score_evidence(candidate))
+                    self.assertIsNotNone(result['score_evidence']['files']['simulations/000/stream_identity.json'])
+                unselected=candidates[1];placeholder=lineage._saved_score(unselected)
+                self.assertEqual(placeholder['status'],'not_native_selected')
+                self.assertIsNone(placeholder['ranking_score'])
+                self.assertEqual(placeholder['score_evidence'],lineage._score_evidence(unselected))
+                for index in range(2):
+                    for name in ['outcome.json','observables.npz','stream_identity.json']:
+                        self.assertIn(f'simulations/{index:03}/{name}',placeholder['score_evidence']['files'])
+                        self.assertIsNone(placeholder['score_evidence']['files'][f'simulations/{index:03}/{name}'])
+                lineage.score('shared')
+                results=json.loads((root/'shared_scores.json').read_text())
+                self.assertEqual(len(results),3)
+                self.assertEqual([v['candidate']['id'] for v in results if v['status']=='not_native_selected'],['shared_0001'])
+                # Integrity is retained: changing an existing selected identity
+                # must still invalidate its previously frozen score evidence.
+                dump(root/'candidates/shared_0000/simulations/000/stream_identity.json',dict(changed=True))
+                with self.assertRaisesRegex(ValueError,'frozen evidence mismatch'):
+                    lineage._saved_score(candidates[0])
+
     def test_full_objective_identical(self):
         p=np.arange(60,dtype=float).reshape(2,30)/100
         expected=fitting.composite_score(p,self.data.obs,self.data.scales,self.data.weights,self.coef,offset=1.)
