@@ -1,81 +1,141 @@
 # Prepared-data baseline runner
 
-This package fits the lineage-determined and perspective-guided SUM-159 pilot baselines from prepared measurements. It retains the
-30-column total/dead observer, six loss components, shared-to-state parameter mapping and zero state transitions from the accepted
-180145/concluded 190611 development pilots. Those pilots supply source, never fitted vectors or runtime dependencies.
+This source implements fresh lineage-determined and perspective-guided SUM-159 pilot fits from prepared data. It preserves the
+30-column total/dead observer, six weighted objective components, shared-to-state mapping and zero state transitions from the accepted
+180145/concluded190611 pilots. Those pilots supply development source, never runtime parameters or fitted vectors. This is a prepared-data
+pilot adapter; database reconstruction and segmentation are prerequisites.
 
-Use the repository entry point `scripts/run_baselines.py`. Paths in JSON configuration resolve relative to that JSON file; explicit
-`BASELINES_PREPARED_DATA`, `BASELINES_OUTPUT_ROOT`, `BASELINES_SCRATCH_ROOT`, `BASELINES_LINEAGE_ENGINE`, and
-`BASELINES_PERSPECTIVE_ENGINE` environment variables override their corresponding paths. Python defaults to the current interpreter.
-The public `examples/sum159/baseline.json` keeps execution disabled. Bare help and synthetic checks need no private data or engines.
+Use `scripts/run_baselines.py`. JSON paths resolve relative to their JSON file. `BASELINES_PREPARED_DATA`, `BASELINES_OUTPUT_ROOT`,
+`BASELINES_SCRATCH_ROOT`, `BASELINES_LINEAGE_ENGINE` and `BASELINES_PERSPECTIVE_ENGINE` override configured paths. Python uses the current
+interpreter unless explicitly configured. `examples/sum159/baseline.json` disables execution. Help and synthetic validation need no private
+inputs or engines.
 
 ```bash
 python scripts/run_baselines.py --help
 python scripts/run_baselines.py mock --config examples/sum159/baseline.json --output tmp/baselines/mock
-python scripts/run_baselines.py preflight --config LOCAL_CONFIG.json --output tmp/baselines/preflight
 python scripts/run_baselines.py dry-run --config LOCAL_CONFIG.json --output tmp/baselines/planning
+python scripts/run_baselines.py prepare --config LOCAL_CONFIG.json --run-name NEW_RUN
+python scripts/run_baselines.py scheduler-plan --config LOCAL_CONFIG.json --run NEW_RUN_PATH --output PLANNING_PATH
 ```
 
-Preparation, dry runs and mocks do not fit, simulate or contact SLURM. Scientific workers require explicit execution authorization,
-matching frozen source/config/input identities and a SLURM allocation. `prepare`, `scheduler-plan`, then `submit` freeze inputs and
-materialize the held dependency campaign; existing runs and attempts cannot be overwritten or automatically resubmitted.
+Preparation/dry runs never fit, simulate or contact SLURM. Future `submit` creates all jobs held, configures dependencies, then releases
+them. Existing runs/attempts cannot be overwritten or automatically resubmitted. Local execution requires a complete project-owned
+storage inventory, the bounded-protocol engine pair, matching frozen hashes and the authorized cleanup/review handoff.
 
-## Restart breadth and scheduling
+## Resource and storage contract
 
-The revised pilot configuration requests 512 fresh shared starts and 500 founder-ridge starts (100 at each configured alpha), 240 seconds
-per optimizer; 1,000 perspective starts retain 300 seconds each. Fit/finalization/native/candidate-score tasks stream through one
-1,000-CPU envelope. Scoring and parent embedding run independently per candidate. Native slots at 0% oxygen are scheduled first across
-ready candidates because measured aggregate runtimes were substantially longer there; seeds, physical slots and dependencies are
-unchanged. Small preparation/reduction/report tasks retain one CPU.
+Project limits are decimal 50e9 durable bytes and 100e9 total peak bytes across all project-created home, shared and node-local artifacts,
+including copies and caches. Moving data behind a symlink does not exclude it. Declare every ownership root in
+`storage.project_scope_roots`; only explicitly declared pre-existing read-only input/environment roots may be excluded. Preflight walks
+resolved targets, deduplicates hard links, counts independent copies separately and refuses undeclared external targets. Filesystem-wide
+free space does not establish a user quota. A new run requires actual inventory plus its full durable reservation below 50e9. An explicit `storage.inventory_file` can reuse a
+post-cleanup snapshot for at most 600 seconds during prepare/submit; `inventory_sha256` binds its exact bytes and ownership roots.
+Without that local option preflight inventories directly. The launch handoff must exclude unrelated new storage-producing work.
 
-Up to 40 candidates receive 24-passage/two-seed native screening plus minority probes. Each eligible non-anchor source has eight
-independent 100-second local refinements inside the same source-anchored bounds and frozen native correction. Replica 0 retains the
-original search path; other replicas use deterministic bounded starts. Finalists remain distinct by original source. Up to three
-vectors receive independent 118-passage/four-seed native validation plus probes. This fixed procedure ends with a saved-evidence report
-and accept-for-now when a valid terminal vector exists; it triggers no extra correction, refit or validation batch.
+The example reserves 32e9 durable growth: 22e9 compact native records, 1e9 selected field frames, 5e9 bounded fit records/traces,
+2e9 report, 50e6 cache/overhead and 1.9e9 metadata. The closed native case count is 14,984; the five capped compact files plus one
+65,536-byte log total at most 1,376,256 bytes/case, or 20,621,819,904 bytes. All 2,104 fit/refinement attempts have a 2e6-byte
+envelope. An additional 623,120,256-byte allowance covers up to 999 interrupted compact atomic overlaps within the same 22e9 reservation.
+Configuration validation recomputes these bounds when counts change. The actual measured project footprint must leave
+32e9 bytes of durable headroom before launch; the planning estimate is 12e9 existing bytes.
 
-Measured-duration replay estimates roughly 378 lineage CPU-hours and approximately 510–515 CPU-hours including perspective/refinement.
-Estimated queue-free elapsed is roughly 68–85 minutes, with native I/O sensitivity and unsuccessful attempts included as uncertainty.
-These are planning estimates, not hard CPU-hour/elapsed caps. Native output is expected to require about 300 GB for lineage plus
-perspective outputs. Check actual filesystem space, quota/inodes, scheduler limits and environments before execution. Preserve native
-XML/MAT snapshots for matched field reporting. Every task retains wall/CPU/outcome accounting; measured and allocated time differ.
+Candidate fields awaiting ranking are temporary, with a separate 16e9-byte staging reservation. At most 1,932 recognized fields of
+8,000,064 bytes total 15,456,123,648 bytes; selected winners remain within the 1e9 durable field allowance and losing fields are deleted.
+Moving a frame into this pool does not create a second payload copy. The final retention manifest and janitor close this lifecycle on
+success, timeout or cancellation. No temporary candidate field is silently classified as durable output or excluded from peak use.
 
-## Scarcity and incomplete evidence
+At most 999 native cases reserve 32e6 transient bytes each. Even at the full 50e9 durable ceiling, the aggregate bound is
+50e9 + 999*32e6 + 16e9 = 97.968e9 bytes, below 100e9. Each case reserves two 8,000,064-byte frames for atomic overlap, 8e6 initial
+inputs, 1e6 logs, 1e6 numeric state trajectory and 2e6 other overhead, including the active compact-file atomic overlap. Initial CSV bytes
+are checked before writing. Case inodes are bounded at 32; durable artifacts reserve 400,000 inodes. Workers create cases only under
+the current run's `transient/`, acquire a reservation before export and release it after cleanup and verified wrapper completion. A wrapper exception keeps its reservation until the janitor,
+so unfinished compact overlaps cannot accumulate outside the reserved count. These are finite ceilings rather than
+preallocated files; all project-created copies and cached bytes remain counted.
 
-Competition/diversity rules guide selection; they do not require two parents, 40 screen candidates or three finalists. Full native
-support is preferred. Partial native objectives retain actual finite measurements and report support masks, normalized retained
-weights and missing components separately from the full objective. Different partial masks are not ranked as directly comparable
-full losses: evidence mass/coverage and deterministic support groups precede within-group cost. Valid same-run approximation results
-can initialize/rank when native evidence is unavailable, explicitly labeled. A fresh current-run design point is the final initialization
-fallback and must pass an actual model evaluation. No historical fitted parameters are used.
+Both engines implement an output-only frame/acknowledgement protocol. A frame contains the actual sample time and full precision x,y,
+total_volume,dead,cell_type columns for at most the existing 200,000-cell guard:64+200000×5×8=8,000,064 bytes. The engine cannot advance to
+another snapshot until the current frame is measured, removed or moved into its reserved durable field asset, then acknowledged. The
+same observer array helper serves legacy XML/MAT and compact frames. No XML/MAT fallback is allowed in this profile. Numerical update
+loops, RNG calls, mechanics, cell-cycle/death rules and objective calculations remain unchanged.
 
-One valid parent can seed all starts; valid outside-window parents can supply diversity. Scarce/empty stages freeze honest manifests
-and continue to useful later work. Unused reserved slots are canceled before running and recorded as unused quota, not successful
-simulations. Failed engines/timeouts retain exact available snapshots; unobserved requested times stay missing. Valid interrupted
-checkpoints can be finalized without reevaluation. Refinement skips unavailable corrections and preserves source vectors when local
-search fails. Integrity, bounds, foreign-source hashes and genuinely invalid/nonfinite models remain errors or unavailable evidence.
+Exploratory cases keep compact observations, support, numeric state trajectory, exact source/seed/time hashes and bounded logs. They
+delete bulky output immediately after measurement, including failure and SIGTERM paths. Immutable compact progress supports recovery
+without another model call after hard interruption. A dependent janitor runs after all campaign allocations terminate, removes stale
+cases/caches, harvests saved evidence if the controller/report failed, and prunes losing field assets. It never deletes output while a
+worker can still own it. Persistent Numba disk caching is disabled; compilation stays in process memory. Python/native core dumps are
+disabled. Diagnostic trial traces are bounded, with total/retained/omitted counts and a hash of every attempted record; fit decisions and
+best checkpoints are unaffected.
 
-No aggregate native-stage clock runs while tasks wait in the queue. Individual native timeouts remain 900 seconds for lineage and
-480 seconds for perspective; outer native jobs allow 45 minutes for observation processing. Reports distinguish accepted available fits,
-search-quota shortfalls, partial/unavailable validation, scientific validity and worker completion. They never infer full scientific
-completion from score-file existence or scheduler success.
+Full precision compact fields for recognized rows 175, 57, 342, 234, replicate 0, are retained within the field budget until ranking. The final
+retention manifest preserves selected fits, regularization-path winners and required fields; losers are pruned after hash checks. Geometry,
+seed, source, observation row and coordinate metadata support full-field statistics and 25% crops. Retaining a partial field is never
+represented as a complete native trajectory.
 
-## External engines
+## Campaign and time window
 
-Use separate external **PhysiCell 1.14.2** checkouts/builds. Preserve each checkout's `core/`, `modules/`, `BioFVM/`, Makefile and license.
-For lineage install `vendor/assets/physicell/baseline_runtime.cpp` as `main.cpp`. For perspective install
-`assets/perspective/physicell/main.cpp` and adjacent `wgd_runtime.h` at the checkout root. Build each with:
+The example fits 512 shared starts and 500 ridge starts (100/alpha), 240 seconds each, with deterministic fresh seeds. It freezes native pools
+from those new saved fits:256 shared sources and 40 ridge sources per alpha (200 total), half best objective and half maximin parameter
+diversity. This is an explicit finite native allocation. Unselected fits retain their approximation results and unvalidated status.
+Selected native trajectories are4,096 shared and 6,400 ridge. Fresh shared native ranking supplies both ridge parents and perspective
+initialization from this same run. No previous run's fitted vectors/rankings/checkpoints are read.
+
+The perspective phase has 996 starts (249/alpha), 300 seconds each, fitting one 999-worker wave while one CPU runs the budget controller.
+Up to 24 sources receive 24-passage/two-seed native screening plus minority probes; configurable best/diverse selection retains permanent
+anchors. Eligible non-anchor sources have four independent 100-second refinements within the same source-anchored bounds and frozen
+native correction. Up to three distinct-source finalists receive all 118 passages/four seeds plus probes. No adaptive correction/refit or
+additional native batch follows validation.
+
+The execution window is 3,600 seconds, with scientific admission ending at 3,300 seconds and 300 seconds reserved for saved-evidence reporting.
+The clock starts on the allocated budget-start worker; later dependency/queue delays remain visible. Per-case native caps are 420 seconds
+lineage and 360 seconds perspective. Remaining global time clips every new fitting/native allowance. At expiry, the controller stops only
+this campaign's jobs, preserves actual partial outcomes, harvests valid current-run checkpoints and reports. If scheduler teardown lags,
+reservations remain active and the dependent janitor reports after stable termination. External queue availability can delay report
+arrival; it never authorizes another scientific allowance. Cleanup-only work and all failures remain in accounting.
+
+Optimizer allowance alone is 150.47 CPU-hours, plus 2.67 CPU-hours refinement. Total planning estimate is310–370 CPU-hours and approximately 50–55 minutes
+without queue delays, based on measured tails with bounded streaming/cleanup. The zero-oxygen cohorts contain 512 shared and 800 ridge
+trajectories, each within one 999-worker wave; shorter oxygen cases can fill the remaining capacity. These forecasts do not guarantee
+completion: queue delay, heavy tails or cleanup overhead may produce a partial saved-evidence report at the same fixed deadline. These are estimates; the 1,000 CPU-hour ceiling and one-hour
+window are limits. Native/fit/finalization/candidate-score tasks retain individual CPU/wall/outcome sidecars. Official SLURM Submit,
+Eligible,Start,End,AllocCPUS,ElapsedRaw,TotalCPU and exit state distinguish allocation, actual CPU, queue/dependency delay and failures.
+The controller uses one CPU and workers at most 999; the afterany janitor starts only after all other allocations end.
+
+## Evidence and manifest interfaces
+
+`lineage_<stage>_fit` manifests map full fresh candidate indices: fit i, finalizer N+i, dependent on its own fit.
+`lineage/<stage>_native_candidates.json` freezes pool_index,candidate_index,candidate_id,alpha,final_sha256 and selection basis.
+`lineage_<stage>_native` manifests use the pool index and explicit global `indices`/local `trajectory_indices`; score groups wait for all
+own native indices. Dispatcher records additionally retain original fit index/id, parent finalizer job/index, pool hash and final hash.
+The selected pool, original candidate manifest and final vectors are checked again before execution.
+
+`budget/clock.json` stores the window; `budget/actions.json` records administrative commands, UTC and return status;
+`budget/controller_outcome.json` distinguishes normal completion, harvest and cleanup pending. `budget_terminal.json` freezes best
+available saved fits/support if validation is incomplete. Normal finalists remain unchanged. `budget_terminal/retention_manifest.json`
+and pruning outcome identify exact kept/deleted compact field assets. `budget/janitor_outcome.json` marks final cleanup. Collect final
+accounting after the janitor exits, including its cost and controller cost; worker completion is separate from scientific support.
+
+Scarce/invalid pools, one parent, unavailable corrections, partial native cases and checkpoint recovery remain explicit evidence tiers.
+Full native scores precede partial scores; different missing-support patterns are not directly compared as full objectives. Missing
+observations are unavailable, never zero loss. Genuine input/source/bounds integrity failures remain errors. The terminal report accepts
+an available fit for now while describing incomplete validation; it does not claim a complete baseline from file existence.
+
+## Rebuilding external engines
+
+Use separate external **PhysiCell 1.14.2** checkouts, preserving core/modules/BioFVM, Makefile and license. For lineage install
+`vendor/assets/physicell/baseline_runtime.cpp` as main.cpp. For perspective install `assets/perspective/physicell/main.cpp` and
+`wgd_runtime.h`, and apply `assets/perspective/physicell/PhysiCell_phenotype.cpp.patch` to the stock core. The exact retained M-exit
+interception hook is required; `core_patch_origin.json` records stock/patched/patch source hashes. BOTH builds require
+`assets/native_frame_protocol.h` beside main.cpp. Build each with:
 
 ```bash
-make -j 4 PhysiCell_custom_module_OBJECTS=
+make -j4 PhysiCell_custom_module_OBJECTS=
 ```
 
-The empty override avoids duplicate custom-module symbols. Supply the two resulting executable paths explicitly. Canonical XML
-sources are `vendor/assets/physicell/PhysiCell_settings.xml` and `assets/perspective/physicell/PhysiCell_settings.xml`. Runtime exporters
-write fitted XML, cell rules, initial cells, sampling times and output locally. Stock PhysiCell and the older generic 29-column observer
-are different models. Exact source/assets and external binary identities are frozen separately.
+The empty override avoids duplicate custom-module symbols. Supply the resulting separate binaries explicitly. Canonical XML assets are
+`vendor/assets/physicell/PhysiCell_settings.xml` and `assets/perspective/physicell/PhysiCell_settings.xml`. Engine
+`--cloneid-frame-protocol` must declare the exact protocol/version/field count/bounds; unsupported old binaries fail before a simulation.
+Before launch, bounded matched-initial-input/seed original-vs-new checks must verify full cell columns, 30 observables and state CSV,
+including division/death events and timeout/cancel cleanup. This is a required transfer check, not a refit or quality threshold.
 
-`source_origins.json` maps development sources without experimental paths. `source_manifest.json` contains public source hashes only.
-No prepared data, binaries, detailed private provenance or old run snapshots belong in this package. Synthetic fixtures are generated
-under temporary scratch directories. Native support/timeout/refinement tests are in `vendor/native_support_mock.py`; they use fakes,
-never the scientific models or external engines. The complete mock suite checks scheduler and terminal failure paths without processes.
+`source_origins.json` and `source_manifest.json` contain public source identities only. Prepared data, binaries, detailed experimental
+provenance, run manifests and validation artifacts stay local. Synthetic fixtures use temporary directories and are removed after checks.

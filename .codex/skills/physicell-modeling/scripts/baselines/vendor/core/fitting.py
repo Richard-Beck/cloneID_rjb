@@ -6,10 +6,14 @@ from scipy.optimize import minimize
 from scipy.special import expit
 
 
+ATOMIC_JSON_BYTES_LIMIT=None
+
 def atomic_json(path, value):
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + f'.{os.getpid()}.tmp')
-    tmp.write_text(json.dumps(value, indent=2, allow_nan=False) + '\n'); tmp.replace(path)
+    data=json.dumps(value, indent=2, allow_nan=False) + '\n'
+    if ATOMIC_JSON_BYTES_LIMIT is not None and len(data.encode())>ATOMIC_JSON_BYTES_LIMIT:raise ValueError('Fit JSON exceeds declared storage bound; previous checkpoint remains intact')
+    tmp.write_text(data); tmp.replace(path)
 
 
 def hill(x, half, exponent):

@@ -1,0 +1,9 @@
+{
+  "physicell_version": "1.14.2",
+  "stock_file": "core/PhysiCell_phenotype.cpp",
+  "stock_sha256": "43552fb92450bd092b99046ca3a5f986b67b118a6533b33466bfd72126c6dc68",
+  "patched_sha256": "b4cf38ea95f6f17d43e07265045a392c40cee647b4759750fc81452f7b8b0729",
+  "patch_sha256": "debc09d7781d7ea5269f45614f6e77a0c770b1b31a4bb7126931153f04894943",
+  "origin": "Exact preserved run-local M-phase interception patch used by the original two-state engine; no biological or numerical changes.",
+  "behavior": "Intercept living-cell M-phase division immediately before native exit/division; retain the original hook and event ordering."
+}

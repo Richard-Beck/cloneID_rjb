@@ -60,7 +60,8 @@ def run(index,seconds=SECONDS,replicate=0):
  class Budget(Exception):pass
  def stop(signum,frame):raise Budget()
  signal.signal(signal.SIGTERM,stop)
- records=[]
+ from bounded_trace import Records
+ records=Records(65536)
  def objective(zz,label):
   nonlocal calls
   if calls and time.monotonic()>deadline:raise Budget()
@@ -116,7 +117,7 @@ def run(index,seconds=SECONDS,replicate=0):
  except Budget:pass
  # Retain source when every local proposal fails.
  best=packed(best,complete=True)
- a.write(folder/'final.json',a.clean(best));a.write(folder/'trials.json',a.clean(records))
+ a.write(folder/'final.json',a.clean(best));a.write(folder/'trials.json',a.clean(records));a.write(folder/'trials_summary.json',records.summary())
  # Native agent consumes refined_<source> as a distinct candidate.
  out=r/'candidates'/candidate_id;out.mkdir(parents=True,exist_ok=True)
  a.write(out/'final.json',a.clean(best))

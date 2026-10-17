@@ -51,8 +51,9 @@ def fit(index):
     # A failed warmup point is not a reason to discard other valid starts.
     warm_seconds=time.monotonic()-warm_started
     started=time.monotonic();deadline=started+SECONDS;calls=0;accepted=0;tested=set();sweep=0
-    traces=(folder/'trials.jsonl').open('w',buffering=1)
-    moves=(folder/'accepted_moves.jsonl').open('w',buffering=1)
+    from bounded_trace import Trace
+    traces=Trace(folder/'trials.jsonl',524288)
+    moves=Trace(folder/'accepted_moves.jsonl',131072)
     cache={};best=None
     class BudgetReached(Exception):pass
     def stop_signal(signum,frame):raise BudgetReached()

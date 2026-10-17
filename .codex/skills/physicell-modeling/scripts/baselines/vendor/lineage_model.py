@@ -7,6 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from core import colony,fitting,assumptions,transfer
 import native_support as support
+import native_stream
 PYTHON=sys.executable
 PARAMETERS=['xeq','speed','K','radius','rho0','m0','vinit','fG','oxygen_ratio','oxygen_half','oxygen_hill','G1_reference_rate','death_rate','dead_duration_hours','initial_dead_fraction']
 NATURAL_BOUNDS=np.array([[.55,.995],[.1,1e5],[.03,100],[3,120],[1e-6,.005],[1,1000],[.25,4],[.02,.98],[.01,100],[.001,100],[.01,100],[.1,24.],[1e-4,3.],[.25,72.],[1e-4,.75]])
@@ -92,25 +93,40 @@ def simulate(stage,index,slot_index):
  c=candidate(stage,index);d=ROOT/'candidates'/c['id'];sd=d/'simulations'/f'{slot_index:03}';sd.mkdir(parents=True,exist_ok=True);result=dict(candidate_id=c['id'],stage=stage,slot_index=slot_index,engine_threads=1,engine_timeout_seconds=TIMEOUT);started=time.monotonic()
  try:
   frozen=read(d/'final.json');slot=read(d/'slots.json')[slot_index];xx=vectors(frozen['x'])[slot['group_index']];shape=[1100,1400];scale=np.sqrt(1.5);domain=[shape[1]*scale,shape[0]*scale];crop=[-shape[1]/2,-shape[0]/2];times=np.array(slot['times_days'])*1440
-  case=sd/'case';meta=transfer.export_case(case,np.exp(xx[:8]),rate(xx,slot['oxygen']),slot['seed'],times,domain,death_per_day=float(np.exp(xx[12])),dead_duration_hours=float(np.exp(xx[13])),initial_dead_fraction=float(np.exp(xx[14])))
-  before=time.monotonic();result['engine_status']='failed'
-  try:
-   with (sd/'engine.log').open('w') as log:
-    done=subprocess.run([str(ENGINE),'PhysiCell_settings.xml'],cwd=case,stdout=log,stderr=subprocess.STDOUT,timeout=TIMEOUT,env=dict(os.environ,OMP_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1',MKL_NUM_THREADS='1'))
-   result['engine_returncode']=done.returncode
-   if done.returncode:result['error']=f'Engine returncode {done.returncode}'
-   else:result['engine_status']='complete'
-  except subprocess.TimeoutExpired as error:result.update(engine_status='timed_out',error=repr(error))
-  except OSError as error:result['error']=repr(error)
-  result['engine_seconds']=time.monotonic()-before;measurement=time.monotonic()
-  arr,available,snapshots,parse_errors=support.measure_requested(case/'output',times,lambda path:transfer.snapshot(path,domain,shape,crop))
+  case=native_stream.case_directory(sd);meta=transfer.export_case(case,np.exp(xx[:8]),rate(xx,slot['oxygen']),slot['seed'],times,domain,death_per_day=float(np.exp(xx[12])),dead_duration_hours=float(np.exp(xx[13])),initial_dead_fraction=float(np.exp(xx[14])))
+  figure_requests={}
+  if slot['replicate']==0:
+   for row,lookup_index in zip(slot['indices'],slot['lookup']):
+    if int(row) in set(native_stream.context(case).get('figure_rows',[175,57,342,234])):figure_requests.setdefault(int(lookup_index),[]).append(int(row))
+  streamed=native_stream.execute([str(ENGINE),'PhysiCell_settings.xml'],case,times,lambda frame:transfer.snapshot_arrays(frame['x'],frame['y'],frame['total_volume'],frame['dead'],domain,shape,crop),TIMEOUT,compact_directory=sd,provenance=dict(candidate_id=c['id'],stage=stage,replicate=int(slot['replicate']),seed=int(slot['seed']),slot_index=slot_index,case_spec=dict(natural_state8=np.exp(xx[:8]).tolist(),rate_per_day=rate(xx,slot['oxygen']),oxygen=slot['oxygen'],seed=int(slot['seed']),times_minutes=times.tolist(),domain_size=domain,field_shape=shape,crop_origin=crop,death_per_day=float(np.exp(xx[12])),dead_duration_hours=float(np.exp(xx[13])),initial_dead_fraction=float(np.exp(xx[14])),mechanics_minutes=.5,phenotype_minutes=3.,post_g1_minutes=780.),source_checkpoint_sha256=support.file_sha(d/'final.json')),figure_requests=figure_requests,figure_geometry=(domain,shape,crop))
+  arr=streamed.pop('predicted');available=streamed.pop('requested_time_support');result.update(streamed);result['stream_status']=result.pop('status')
   lookup=np.asarray(slot['lookup'],int);row_available=available[lookup];indices=np.asarray(slot['indices'],int)
-  np.savez_compressed(sd/'observables.npz',indices=indices[row_available],predicted=arr[lookup[row_available]],trajectory_predicted=arr,times_minutes=times,requested_indices=indices,requested_time_support=available)
+  native_stream.map_observables(sd,indices,lookup)
   complete=bool(available.all()) and bool(np.isfinite(arr).all()) and result['engine_status']=='complete'
-  result.update(status='complete' if complete else 'partial' if available.any() else 'failed',slot=slot,initialization=meta,snapshots=snapshots,snapshot_parse_errors=parse_errors,requested_snapshots=len(times),measured_snapshots=int(available.sum()),measurement_seconds=time.monotonic()-measurement,domain_size=domain,field_shape=shape,crop_origin=crop)
- except Exception as error:result.update(status='failed',error=repr(error),traceback=traceback.format_exc())
- result['wall_seconds']=time.monotonic()-started;write(sd/'outcome.json',result)
+  result.update(status='complete' if complete else 'partial' if available.any() else 'failed',slot=slot,initialization=meta,requested_snapshots=len(times),measured_snapshots=int(available.sum()),domain_size=domain,field_shape=shape,crop_origin=crop)
 
+ except Exception as error:result.update(status='failed',error=repr(error),traceback=traceback.format_exc())
+ finally:
+  import shutil
+  if 'case' in locals() and case.exists():shutil.rmtree(case)
+ result['wall_seconds']=time.monotonic()-started;native_stream.write_json(sd/'outcome.json',result)
+ if (sd/'observables.npz').exists() and result['status'] in {'complete','partial'}:native_stream.finalize_compact_case(sd)
+
+
+
+def recover_lineage_case(stage,index,slot_index):
+    """Recover only current-run measured compact evidence; no model calls."""
+    return _recover_lineage_candidate(candidate(stage,index),slot_index)
+
+
+def _recover_lineage_candidate(c,slot_index):
+    folder=ROOT/'candidates'/c['id'];directory=folder/'simulations'/f'{slot_index:03}'
+    path=directory/'outcome.json'
+    if path.exists() and read(path).get('status') in {'complete','partial'}:return read(path)
+    if not (directory/'stream_identity.json').exists():return None
+    final=folder/'final.json';slots=read(folder/'slots.json');slot=slots[slot_index]
+    expected=native_stream.run_expectation(ROOT.parent,c['id'],support.file_sha(final),c['stage'],slot['replicate'])
+    return native_stream.recover_mapped_case(directory,expected,np.asarray(slot['times_days'])*1440,slot['indices'],slot['lookup'],dict(candidate_id=c['id'],stage=c['stage'],slot_index=slot_index,slot=slot))
 
 def _score_evidence(c):
  d=ROOT/'candidates'/c['id'];files={}
@@ -118,7 +134,7 @@ def _score_evidence(c):
   path=d/relative;files[relative]=support.file_sha(path) if path.exists() else None
  if (d/'slots.json').exists():
   for si,_ in enumerate(read(d/'slots.json')):
-   for name in ['outcome.json','observables.npz']:
+   for name in ['outcome.json','observables.npz','stream_identity.json']:
     relative=f'simulations/{si:03}/{name}';path=d/relative;files[relative]=support.file_sha(path) if path.exists() else None
  return dict(candidate=c,files=files)
 
@@ -133,7 +149,10 @@ def score_candidate(c):
   result.update(status='invalid',reason='invalid_final');write(d/'score.json',result);return result
  result.update(x=final['x'],count_offset=COUNT_OFFSET,approximation_data_loss=final['data_loss'],assumption_penalty=final['assumption_penalty'],ridge_penalty=final['ridge_penalty'],parameter_difference=final['parameter_difference'],search_objective=final['loss'])
  if not (d/'slots.json').exists():result['reason']='missing_slots';write(d/'score.json',result);return result
- data=Data();slots=read(d/'slots.json');pred=np.full((REPLICATES,data.n,30),np.nan);seen=np.zeros((REPLICATES,data.n),int);fail=[];completed=0
+ data=Data();slots=read(d/'slots.json')
+ for slot_index,_ in enumerate(slots):_recover_lineage_candidate(c,slot_index)
+ result['score_evidence']=_score_evidence(c)
+ pred=np.full((REPLICATES,data.n,30),np.nan);seen=np.zeros((REPLICATES,data.n),int);fail=[];completed=0
  for si,slot in enumerate(slots):
   sd=d/'simulations'/f'{si:03}';outcome=read(sd/'outcome.json') if (sd/'outcome.json').exists() else {}
   if outcome.get('status')!='complete':fail.append(dict(slot_index=si,status=outcome.get('status','missing'),reason=outcome.get('error')))

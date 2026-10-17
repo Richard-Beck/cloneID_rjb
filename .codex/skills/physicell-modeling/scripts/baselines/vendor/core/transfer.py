@@ -65,9 +65,6 @@ def initial(p, seed, domain_size, post_g1_minutes=780., initial_dead_fraction=0.
 
 def snapshot(path, domain_size, field_shape, crop_origin):
     path = Path(path)
-    W, H = domain_size
-    FH, FW = field_shape
-    CROP_X, CROP_Y = crop_origin
     root = ET.parse(path).getroot()
     labels = {l.text: (int(l.attrib['index']), int(l.attrib['size']))
               for l in root.findall('.//labels/label')}
@@ -76,8 +73,17 @@ def snapshot(path, domain_size, field_shape, crop_origin):
     vi = labels['total_volume'][0]
     live = (data[labels['dead'][0]] == 0 if 'dead' in labels
             else data[labels['current_phase'][0]] < 100)
-    x, y = data[pos], data[pos+1]
-    rad = (np.maximum(data[vi], 0)*3/(4*np.pi))**(1/3)
+    return snapshot_arrays(data[pos],data[pos+1],data[vi],~live,domain_size,field_shape,crop_origin)
+
+
+def snapshot_arrays(x,y,total_volume,dead,domain_size,field_shape,crop_origin):
+    """The identical observer for legacy MAT columns and compact float64 frames."""
+    W,H=domain_size
+    FH,FW=field_shape
+    CROP_X,CROP_Y=crop_origin
+    x,y,total_volume=np.asarray(x),np.asarray(y),np.asarray(total_volume)
+    live=np.asarray(dead)==0
+    rad = (np.maximum(total_volume, 0)*3/(4*np.pi))**(1/3)
     near = (x+rad >= CROP_X) & (x-rad < CROP_X+FW) & (y+rad >= CROP_Y) & (y-rad < CROP_Y+FH)
     canvas = np.zeros((FH, FW), dtype=bool)
     for xx, yy, rr in zip(x[near]-CROP_X, y[near]-CROP_Y, rad[near]):
@@ -114,7 +120,8 @@ def export_case(directory, p, rate, seed, times, domain_size,
     d.mkdir(parents=True, exist_ok=False)
     (d/'output').mkdir()
     ic, meta = initial(p, seed, domain_size, post_g1_minutes, initial_dead_fraction)
-    ic.to_csv(d/'initial_cells.csv', index=False)
+    import native_stream
+    native_stream.write_initial_csv(ic,d/'initial_cells.csv')
     np.savetxt(d/'sample_times.txt', times, fmt='%.8f')
     tree = ET.parse(Path(__file__).resolve().parents[1]/'assets/physicell/PhysiCell_settings.xml')
     root = tree.getroot()

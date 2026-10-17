@@ -9,7 +9,7 @@
     "authorized": false,
     "perspective_source_accepted": true,
     "terminal_policy": "conditional_native_correction_refinement_independent_finalists",
-    "reason": "Scientific execution is disabled in this public prepared-data pilot example. Full refitting is deferred.",
+    "reason": "Public example is execution-disabled; a complete project storage inventory, compact-protocol engines and the authorized cleanup/review handoff are required locally.",
     "acceptance_policy": "After the planned independent final validation, report diagnostics and accept the fit for now. No adaptive correction/refit/additional native batch follows."
   },
   "paths": {
@@ -183,10 +183,16 @@
     "first_start_policy": "illustrative_parameters_with_prepared_early_count_density",
     "parent_competitive_window": 0.2,
     "ridge_parent_other_policy": "competitive_maximin_then_valid_other_then_best_fallback",
-    "native_timeout_seconds": 900,
+    "native_timeout_seconds": 420,
     "native_oxygen_priority": [
       0.0
-    ]
+    ],
+    "native_pool": {
+      "shared": 256,
+      "ridge_per_alpha": 40,
+      "best_fraction": 0.5,
+      "selection": "best approximation objective then deterministic maximin parameter diversity among remaining valid current-run fits"
+    }
   },
   "perspective": {
     "parameter_names": [
@@ -368,7 +374,7 @@
       1.0,
       10.0
     ],
-    "starts_per_alpha": 250,
+    "starts_per_alpha": 249,
     "optimizer_seconds": 300,
     "steps": 600,
     "seed_search": 202610161906,
@@ -401,7 +407,7 @@
     "non_nesting": "Only fully shared lineage vectors embed physically. Founder-specific rho0/m0 ridge vectors do not embed. Assay loss changes the comparison objective; shared stochastic native scores are not identical two-state realizations.",
     "native_policy_provisional": false,
     "conditional": {
-      "screen_candidates_per_alpha": 10,
+      "screen_candidates_per_alpha": 6,
       "screen_quality_per_alpha": 5,
       "screen_passages": 24,
       "screen_replicates": 2,
@@ -427,44 +433,99 @@
         "screen": null,
         "final_validation": null
       },
-      "deadline_origin": "No aggregate stage deadline; queue/dependency waiting does not consume scientific work. Individual cases retain native_timeout_seconds.",
-      "refinement_replicates": 8
+      "deadline_origin": "No per-stage preparation clock. The single execution window begins on allocated budget-start worker;55min scientific admission and5min reserved reporting include subsequent dependency/queue time.",
+      "refinement_replicates": 4
     },
-    "native_timeout_seconds": 480
+    "native_timeout_seconds": 360
   },
   "resources": {
-    "status": "Restart sizing: 512 shared +500 ridge +1000 perspective fits; 8 bounded local starts/source; execution remains disabled in public example",
+    "status": "Storage-aware setup only; explicit local inventory, rebuilt compact-protocol engines and cleanup handoff required before execution",
     "partition": "red",
     "qos": "large",
     "max_concurrent_cpus": 1000,
     "memory_mb_per_task": 3000,
-    "fit_wall_minutes": 10,
+    "fit_wall_minutes": 6,
     "finalize_wall_minutes": 5,
-    "native_wall_minutes": 45,
-    "report_wall_minutes": 20,
+    "native_wall_minutes": 8,
+    "report_wall_minutes": 5,
     "report_cpu_hours_allowance": 1.0,
-    "budget_cpu_hours_cap": null,
+    "budget_cpu_hours_cap": 1000,
     "scheduler_probe_performed": false,
     "throttle_reason": "Future stream arrays exceeding agreed max_concurrent_cpus must share that cap; no independent arbitrary throttle.",
     "scheduler_limits_verified": false,
     "sizing": {
-      "expected_lineage_cpu_hours": 378,
-      "expected_total_cpu_hours": 513,
-      "lineage_elapsed_priority_minutes": 36.8,
-      "lineage_elapsed_native_wall_1_5x_minutes": 51.7,
-      "total_elapsed_queue_free_minutes_range": [
-        68,
-        85
+      "optimizer_allowance_cpu_hours": 150.47,
+      "refinement_allowance_cpu_hours": 2.67,
+      "estimated_total_measured_cpu_hours": [
+        310,
+        370
       ],
-      "expected_shared_fitting_busy_cpus": 493,
-      "expected_ridge_fitting_busy_cpus": 487,
-      "expected_refinement_cpus_up_to": 304,
-      "lineage_output_storage_gb_estimate": 300,
-      "estimate_basis": "Paired measured completed/stopped attempt durations, 0percent-oxygen-first scheduling replay; historical perspective timings, 8x bounded refinement. Estimates are not guarantees or CPU-hour caps."
-    }
+      "estimated_queue_free_minutes": [
+        50,
+        55
+      ],
+      "native_pool": "256 shared, 40 ridge per alpha (200 total), objective-best plus parameter-diverse fresh finals",
+      "notes": "Estimates include measured JIT/finalization/native/analysis overhead; 512/800 zero-oxygen trajectories each fit a 999-worker wave. Queue delays/heavy tails can force a partial saved-fit report at55minutes; no guarantee of full validation."
+    },
+    "execution_window_seconds": 3600,
+    "science_window_seconds": 3300,
+    "report_reserve_seconds": 300,
+    "controller_cpus": 1
   },
   "source_revision": {
     "origin": "Accepted 20261016_180145 lineage pilot and concluded 20261016_190611 perspective pilot; source adapted from the isolated91-check setup.",
     "scientifically_rerun_after_promotion": false
+  },
+  "storage": {
+    "durable_limit_bytes": 50000000000,
+    "total_peak_limit_bytes": 100000000000,
+    "existing_project_bytes_estimate": 12000000000,
+    "new_durable_bytes_reservation": 32000000000,
+    "report_reservation_bytes": 2000000000,
+    "figure_reservation_bytes": 1000000000,
+    "native_case_slots": 999,
+    "case_reservation_bytes": 32000000,
+    "case_components_bytes": {
+      "frame_and_atomic_overlap": 16000128,
+      "initial_inputs": 8000000,
+      "logs": 1000000,
+      "state_trajectory": 1000000,
+      "other": 2000000
+    },
+    "case_inode_limit": 32,
+    "durable_inode_reservation": 400000,
+    "frame_max_cells": 200000,
+    "frame_fields": 5,
+    "frame_bytes": 8000064,
+    "compact_case_bytes": 262144,
+    "figure_rows": [
+      175,
+      57,
+      342,
+      234
+    ],
+    "figure_replicates": [
+      0
+    ],
+    "project_scope_roots": [],
+    "read_only_external_roots": [],
+    "inventory_required_before_launch": true,
+    "transient_policy": "Only run/transient/; no hidden node/shared copies; acquire reservation before export; measure acknowledged frame then delete; finally cleanup plus controller stale-case cleanup after cancellation",
+    "engine_protocol": "cloneid-native-frame-v1",
+    "retain_raw_exploratory_fields": false,
+    "cache_peak_reservation_bytes": 50000000,
+    "fit_logs_reservation_bytes": 5000000000,
+    "compact_measurement_reservation_bytes": 22000000000,
+    "compact_case_total_bytes": 2000000,
+    "jit_disk_cache": false,
+    "case_count_basis": {
+      "oxygen_levels": 8,
+      "final_passages": 118,
+      "prepared_observation_rows": 343
+    },
+    "metadata_reservation_bytes": 1900000000,
+    "fit_attempt_max_bytes": 2000000,
+    "figure_staging_reservation_bytes": 16000000000,
+    "compact_case_final_bytes": 1376256
   }
 }

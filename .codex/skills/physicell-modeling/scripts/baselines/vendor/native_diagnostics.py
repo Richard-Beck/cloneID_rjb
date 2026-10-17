@@ -12,6 +12,7 @@ sys.path.insert(0,str(HERE))
 import perspective_model as a
 import wgd_transfer as native
 import native_support as support
+import native_stream
 from wgd_colony import simulate_two_state
 
 PY=a.PYTHON
@@ -58,26 +59,50 @@ def run(stage,index):
   final=read(fp);sp=spec(final,s);remaining=stage_remaining_seconds(stage)
   if remaining<5:raise RuntimeError('Relative native-stage deadline exhausted; case not started')
   result['engine_timeout_seconds']=min(TIMEOUT,remaining)
-  nativeout=native.execute(folder/'case',sp,timeout_seconds=min(TIMEOUT,remaining),measure=s['kind']=='main');result['native']=nativeout
+  figure_requests={}
+  if s['replicate']==0 and s['kind']=='main':
+   for row in s['observation_rows']:
+    if int(row) in set(native_stream.context(native_stream.case_directory(folder)).get('figure_rows',[175,57,342,234])):
+     target=float(a.Data().rows.iloc[int(row)].time_days)*1440;sample=int(np.argmin(abs(np.asarray(sp['times_days'])*1440-target)));figure_requests.setdefault(sample,[]).append(int(row))
+  nativeout=native.execute(native_stream.case_directory(folder),sp,timeout_seconds=min(TIMEOUT,remaining),measure=s['kind']=='main',compact_directory=folder,provenance=dict(candidate_id=s['candidate_id'],stage=stage,replicate=int(s['replicate']),seed=int(s['seed']),case_index=int(index),source_checkpoint_sha256=checkpoint_hash),figure_requests=figure_requests);result['native']=nativeout
   if nativeout.get('error'):result['error']=nativeout['error']
   trajectory=None
   try:
-   trajectory=native.read_trajectory(folder/'case/state_trajectory.csv')
+   trajectory=native.read_trajectory(folder/'state_trajectory.csv')
    if int(trajectory.wgd_events.max())!=0:raise ValueError('Forbidden state-transition events in native case')
    result.update(initial_counts=trajectory.iloc[0].to_dict(),last_available_counts=trajectory.iloc[-1].to_dict(),last_available_time_minutes=float(trajectory.time_minutes.iloc[-1]))
    if nativeout.get('requested_terminal_time_available'):result['harvest_counts']=trajectory.iloc[-1].to_dict()
   except (OSError,ValueError,pd.errors.ParserError) as error:
    if 'Forbidden state-transition' in str(error):raise
    result['trajectory_error']=repr(error);trajectory=None
-  if s['kind']=='main' and (folder/'case/observables.npz').exists():
-   with np.load(folder/'case/observables.npz') as z:
+  if s['kind']=='main' and (folder/'stream_observables.npz').exists():
+   with np.load(folder/'stream_observables.npz') as z:
     rows=a.Data().rows.iloc[s['observation_rows']];requested=rows.time_days.to_numpy()*1440;times=z['times_minutes'];values=z['predicted'];available=z['requested_time_support'] if 'requested_time_support' in z else np.isfinite(values).all(axis=1)
     lookup=np.argmin(abs(times[:,None]-requested[None,:]),axis=0);matched=(abs(times[lookup]-requested)<.500001)&available[lookup]
-    np.savez_compressed(folder/'observables.npz',indices=np.asarray(s['observation_rows'])[matched],predicted=values[lookup[matched]],trajectory_predicted=values,times_minutes=times,requested_indices=s['observation_rows'],requested_time_support=available)
+    native_stream.map_observables(folder,s['observation_rows'],lookup)
     result.update(requested_observations=len(requested),measured_observations=int(matched.sum()))
   result['status']='complete' if nativeout['status']=='success' else 'partial' if result.get('measured_observations',0)>0 or trajectory is not None else 'failed'
  except Exception as error:result.update(error=repr(error),traceback=traceback.format_exc())
- result['wall_seconds']=time.monotonic()-started;write(folder/'outcome.json',result);print(index,s['candidate_id'],s['kind'],result['status'],result['wall_seconds'],flush=True)
+ result['wall_seconds']=time.monotonic()-started;native_stream.write_json(folder/'outcome.json',result)
+ if result['status'] in {'complete','partial'}:native_stream.finalize_compact_case(folder)
+ print(index,s['candidate_id'],s['kind'],result['status'],result['wall_seconds'],flush=True)
+
+
+def recover_perspective_case(stage,index,rows=None):
+    """Recover exact saved native rows and numeric state CSV without evaluation."""
+    out=ROOT/stage;slot=read(out/'slots.json')[index];directory=out/'cases'/slot['candidate_id']/f'{index:05}'
+    path=directory/'outcome.json'
+    if path.exists() and read(path).get('status') in {'complete','partial'}:return read(path)
+    if not (directory/'stream_identity.json').exists():return None
+    frozen=out/'frozen'/slot['candidate_id']/'final.json';digest=sha(frozen)
+    if read(out/'parameter_manifest.json')[slot['candidate_id']]!=digest:raise ValueError('Recovered native frozen parameter hash mismatch')
+    expected=native_stream.run_expectation(ROOT.parent,slot['candidate_id'],digest,stage,slot['replicate'])
+    times=np.unique(np.ceil(np.asarray(slot['times_days'])*1440/.5)*.5)
+    if rows is None:rows=pd.read_csv(ROOT/'inputs/observations.csv')
+    target=rows.iloc[slot['observation_rows']].time_days.to_numpy(float)*1440
+    lookup=np.argmin(abs(times[:,None]-target[None,:]),axis=0) if len(target) else np.array([],int)
+    if len(target) and np.any(abs(times[lookup]-target)>.500001):raise ValueError('Frozen native observation times do not match requested samples')
+    return native_stream.recover_mapped_case(directory,expected,times,slot['observation_rows'],lookup,dict(slot=slot,checkpoint_sha256=digest))
 
 def response(data,nat,o,f,horizon):
  f=float(np.clip(f,EPS,1-EPS));dt=data.dt[o];stop=np.ceil(horizon/dt)*dt;dl=nat['dmax']*float(np.clip(1-o/20.5,0,1))
@@ -121,6 +146,7 @@ def analyze(stage,index):
  nat=a.decode(final['x'],'no_wgd');data=a.Data();dest=out/'analysis'/cid;dest.mkdir(parents=True,exist_ok=True)
  slots=[s for s in read(out/'slots.json') if s['candidate_id']==cid];reps=read(out/'contract.json')['replicates'];pred=np.full((reps,data.n,30),np.nan);seen=np.zeros((reps,data.n),int);cases=[];raw=[];failed=[]
  for slot in slots:
+  recover_perspective_case(stage,slot['case_index'],data.rows)
   sd=out/'cases'/cid/f"{slot['case_index']:05}";path=sd/'outcome.json'
   if not path.exists():failed.append(dict(case_index=slot['case_index'],reason='missing'));continue
   result=read(path)
@@ -128,7 +154,7 @@ def analyze(stage,index):
   if result.get('status')!='complete':failed.append(dict(case_index=slot['case_index'],reason=result.get('error',result.get('status','failed'))))
   trajectory=None
   try:
-   trajectory=native.read_trajectory(sd/'case/state_trajectory.csv')
+   trajectory=native.read_trajectory(sd/'state_trajectory.csv')
    if int(trajectory.wgd_events.max())!=0:raise ValueError('Forbidden state-transition events in native case')
    if abs(float(trajectory.time_minutes.iloc[0]))>.500001:raise ValueError('Missing native initial counts')
   except (OSError,ValueError,pd.errors.ParserError) as error:

@@ -84,22 +84,23 @@ fits are preferred, with other valid current-run parents filling scarcity. A sin
 approximation and fresh-design fallbacks are labelled explicitly and checked for valid embedding. Historical fitted vectors and the
 founder-ridge winner are not used as perspective parents.
 
-The restart uses 512 shared starts, 100 founder-specific starts at each of five ridge strengths, 1,000 perspective exploratory starts
-and eight 100-second local refinement starts per eligible source. Native simulations, candidate scoring and parent embedding run in
-parallel as their prerequisites finish, sharing one 1,000-CPU cap. Long 0% oxygen cases receive scheduling priority. Brief input checks
-and reporting retain small allocations. Aggregate stage deadlines are disabled so queue waiting cannot exhaust scientific work;
-individual engine timeouts remain. Planning estimates are about 513 CPU-hours and 68–85 minutes before external queue delays, including
-additional refinement breadth; these are estimates, not a CPU-hour or wall-time cap. Replacement run
-`20261017_152845_sum159_baseline_scratch` passed preflight and launched on 2026-10-17, then was canceled after home storage rejected
+Run `20261017_152845_sum159_baseline_scratch` passed preflight and launched on 2026-10-17, then was canceled after home storage rejected
 writes during ridge evaluation. All 512 shared and 500 ridge fits completed. The shared stage had 238 fully supported candidates and
 best native loss 8.7152; ridge validation was incomplete and perspective fitting had not started. Total measured use was 203.0114
 CPU-hours including preflight and storage recovery. Compact parameters, scores, source/input identities and accounting are retained;
-bulk fields and external copies are being reclaimed. The expansion above describes that canceled attempt, not an accepted full fit.
+bulk fields and external copies are being reclaimed. This canceled attempt is not an accepted full fit.
 
-The replacement workflow must obey [AGENTS.md](../../AGENTS.md): 50 GB durable storage, 100 GB transient peak across every volume, and
-up to 1,000 cores for one hour. It is being changed to measure bounded native frames as they arrive, discard unselected raw output and
-retain only compact evidence plus the selected report fields. A new run starts from prepared data and fresh parameters. It will not
-reuse the canceled run's fitted vectors. Its final plan and source identity will be recorded before launch.
+The storage-aware plan obeys [AGENTS.md](../../AGENTS.md): 50 GB durable storage, 100 GB transient peak across every volume, and up to
+1,000 cores for one hour. It retains 512 shared and 500 founder-specific fresh starts, selects 256 shared and 200 founder-specific
+vectors for native evaluation, then uses 996 perspective starts, a 24-source screen, four bounded refinements per eligible source and
+three independently validated finalists. One controller core leaves at most 999 worker cores. Long 0% oxygen cases receive scheduling
+priority. The estimated use is 310–370 CPU-hours and 50–55 minutes before scheduler delays; these estimates do not establish completion.
+At 55 minutes after the allocated start job, the controller harvests saved evidence and reserves five minutes for reporting and cleanup.
+
+Native frames are measured as they arrive and removed immediately. Compact metrics and selected report fields remain. Declared storage
+reservations cover all simultaneous workers, retained metrics, field staging and cleanup overlap. Actual retained project usage plus
+32 GB reserved for the new run must fit below the 50 GB durable limit before submission. New fitting starts from prepared data and fresh
+parameters; it does not reuse canceled-run vectors. The final plan, input hashes and source identity are frozen before launch.
 
 Poor fits, missing native cases and scarce screen/finalist pools produce a result with explicit limitations rather than stopping solely
 on quality or coverage. Fully supported scores rank ahead of partial evidence, and partial losses are compared only on matching support.

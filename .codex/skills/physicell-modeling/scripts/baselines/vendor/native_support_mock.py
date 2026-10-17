@@ -121,15 +121,15 @@ class LineageChecks(unittest.TestCase):
 class TransferChecks(unittest.TestCase):
     def test_timeout_preserves_earlier_exact_observations(self):
         with tempfile.TemporaryDirectory() as temporary:
-            directory=Path(temporary)/'case'
-            def export(folder,spec,override):
-                folder.mkdir();(folder/'output').mkdir();(folder/'output/output00000000.xml').write_text('<root><current_time>0</current_time></root>');trajectory(folder/'state_trajectory.csv',last=0.)
-                return {},np.array([0.,30.])
-            spec=dict(times_days=[0.,30/1440],domain_size=[1,1],field_shape=[1,1],crop_origin=[0,0])
-            with patch.object(transfer,'export_case',side_effect=export),patch.object(transfer.subprocess,'run',side_effect=subprocess.TimeoutExpired('fake',1)),patch.object(transfer,'snapshot',return_value=(np.ones(30),{})):
-                outcome=transfer.execute(directory,spec,timeout_seconds=1)
-            self.assertEqual(outcome['status'],'partial');self.assertEqual(outcome['engine_status'],'timed_out');self.assertFalse(outcome['requested_terminal_time_available'])
-            with np.load(directory/'observables.npz') as values:self.assertEqual(values['requested_time_support'].tolist(),[True,False]);self.assertTrue(np.isnan(values['predicted'][1]).all())
+            directory=Path(temporary)/'case';compact=directory.parent
+            def export(folder,spec,override):folder.mkdir();return {},np.array([0.,30.])
+            def execute(*args,**kwargs):
+                trajectory(compact/'state_trajectory.csv',last=0.)
+                return dict(status='partial',engine_status='timed_out',requested_time_support=np.array([True,False]),predicted=np.vstack([np.ones(30),np.full(30,np.nan)]))
+            spec=dict(times_days=[0.,30/1440],domain_size=[1,1],field_shape=[1,1],crop_origin=[0,0],seed=1)
+            with patch.object(transfer,'export_case',side_effect=export),patch.object(transfer.native_stream,'execute',side_effect=execute):outcome=transfer.execute(directory,spec,timeout_seconds=1)
+            self.assertEqual(outcome['status'],'partial');self.assertEqual(outcome['engine_status'],'timed_out');self.assertFalse(outcome['requested_terminal_time_available']);self.assertFalse(directory.exists())
+            self.assertFalse((compact/'native_observables.npz').exists());self.assertFalse((compact/'native_outcome.json').exists())
 
 
 class DiagnosticChecks(unittest.TestCase):
@@ -148,7 +148,7 @@ class DiagnosticChecks(unittest.TestCase):
     def tearDown(self):
         self.evaluate_patch.stop();self.decode_patch.stop();self.data_patch.stop();self.context.stop();self.temporary.cleanup()
     def add(self,both=False):
-        folder=self.stage/'cases'/self.cid/'00000';dump(folder/'outcome.json',dict(status='partial',error='timeout',checkpoint_sha256=self.digest));trajectory(folder/'case/state_trajectory.csv',both=both)
+        folder=self.stage/'cases'/self.cid/'00000';dump(folder/'outcome.json',dict(status='partial',error='timeout',checkpoint_sha256=self.digest));trajectory(folder/'state_trajectory.csv',both=both)
         np.savez_compressed(folder/'observables.npz',indices=[0],predicted=np.ones((1,30)))
     def test_partial_microscopy_survives_missing_correction(self):
         self.add();diagnostics.analyze('screen',0);dest=self.stage/'analysis'/self.cid

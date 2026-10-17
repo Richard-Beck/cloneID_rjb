@@ -295,7 +295,12 @@ using namespace BioFVM;
 using namespace PhysiCell;
 
 
+#include "native_frame_protocol.h"
+
 int main(int argc,char* argv[]) {
+ if(cloneid_frame::capability_request(argc,argv)) {return 0;}
+ cloneid_frame::initialize();
+ const bool compact_frames=cloneid_frame::enabled();
  if(argc<2 || !load_PhysiCell_config_file(argv[1])) { return 1; }
  omp_set_num_threads(PhysiCell_settings.omp_num_threads);
  setup_microenvironment();
@@ -306,14 +311,16 @@ int main(int argc,char* argv[]) {
  std::ifstream input(parameters.strings("sample_times_file"));
  std::vector<double> times; double time; while(input>>time) { times.push_back(time); }
  if(times.empty()) { std::cerr<<"No sample times"<<std::endl; return 2; }
+ if(compact_frames && times.size()>1024) {std::cerr<<"Compact frame sample-count resource guard"<<std::endl;return 5;}
  char name[2048]; sprintf(name,"%s/initial",PhysiCell_settings.folder.c_str());
- save_PhysiCell_to_MultiCellDS_v2(name,microenvironment,0.);
+ if(!compact_frames) {save_PhysiCell_to_MultiCellDS_v2(name,microenvironment,0.);}
  size_t next=0; const long long last=(long long)ceil(PhysiCell_settings.max_time/diffusion_dt);
  for(long long step=0;step<=last;++step) {
   PhysiCell_globals.current_time=step*diffusion_dt;
   if(next<times.size() && PhysiCell_globals.current_time>=times[next]) {
    sprintf(name,"%s/output%08u",PhysiCell_settings.folder.c_str(),(unsigned int)next);
-   save_PhysiCell_to_MultiCellDS_v2(name,microenvironment,PhysiCell_globals.current_time);
+   if(compact_frames) {cloneid_frame::save(next,PhysiCell_globals.current_time);}
+   else {save_PhysiCell_to_MultiCellDS_v2(name,microenvironment,PhysiCell_globals.current_time);}
    std::cout<<"SAMPLE "<<next<<" time_min "<<PhysiCell_globals.current_time<<" cells "<<all_cells->size()<<std::endl; ++next;
   }
   if(next==times.size()) { break; }

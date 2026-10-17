@@ -19,6 +19,7 @@ from scipy.io import loadmat
 from core.colony import BASE, init_volume
 from core.transfer import snapshot
 import native_support as support
+import native_stream
 
 ASSET_ROOT=Path(__file__).resolve().parents[1]/"assets/perspective"
 ENGINE=None
@@ -123,7 +124,7 @@ def export_case(directory,spec,initial_override=None):
         cells=cells[['x','y','state','phase','elapsed','nuclear_solid','cytoplasmic_solid','fluid','dead','dead_age_minutes']]
         metadata.update(cells=len(cells),n_low=int(((cells.state==0)&(cells.dead==0)).sum()),n_high=int(((cells.state==1)&(cells.dead==0)).sum()),
                         n_dead_low=int(((cells.state==0)&(cells.dead!=0)).sum()),n_dead_high=int(((cells.state==1)&(cells.dead!=0)).sum()))
-    cells.to_csv(directory/"initial_cells.csv",index=False);np.savetxt(directory/"sample_times.txt",times,fmt="%.8f")
+    native_stream.write_initial_csv(cells,directory/"initial_cells.csv");np.savetxt(directory/"sample_times.txt",times,fmt="%.8f")
     tree=ET.parse(ASSET_ROOT/"physicell/PhysiCell_settings.xml");root=tree.getroot()
     def put(path,value):root.find(path).text=str(value)
     for path,value in [("domain/x_min",-width/2),("domain/x_max",width/2),("domain/y_min",-height/2),("domain/y_max",height/2),
@@ -181,42 +182,30 @@ def read_trajectory(path):
     return frame
 
 
-def execute(directory,spec,timeout_seconds=600,initial_override=None,pair_check=False,measure=True):
-    directory=Path(directory);start=time.monotonic();outcome=dict(status='failure',engine_status='not_started',requested_times_days=spec['times_days'])
+def execute(directory,spec,timeout_seconds=600,initial_override=None,pair_check=False,measure=True,compact_directory=None,provenance=None,figure_requests=None):
+    directory=Path(directory);compact=Path(compact_directory or directory.parent);start=time.monotonic();outcome=dict(status='failure',engine_status='not_started',requested_times_days=spec['times_days'])
     try:
+        if pair_check:raise ValueError('Pair-check is outside compact acquisition protocol; use an explicitly separate bounded adapter')
         metadata,times=export_case(directory,spec,initial_override)
-        command=[str(ENGINE),'PhysiCell_settings.xml']
-        if pair_check:command.append('--pair-check')
-        outcome.update(initial=metadata,sample_times_minutes=times.tolist(),engine_status='failed')
+        provenance=dict(provenance or {},case_spec=spec,seed=int(spec['seed']))
+        streamed=native_stream.execute([str(ENGINE),'PhysiCell_settings.xml'],directory,times,lambda frame:support_snapshot(frame,spec),timeout_seconds,compact_directory=compact,measure=measure,provenance=provenance,figure_requests=figure_requests,figure_geometry=(spec['domain_size'],spec['field_shape'],spec['crop_origin']))
+        values=streamed.pop('predicted');available=streamed.pop('requested_time_support');outcome.update(streamed,initial=metadata,sample_times_minutes=times.tolist())
+        trajectory=None
         try:
-            with open(directory/'engine.log','w') as log:
-                result=subprocess.run(command,cwd=directory,stdout=log,stderr=subprocess.STDOUT,timeout=timeout_seconds,
-                                      env={**os.environ,'OMP_NUM_THREADS':'1','OPENBLAS_NUM_THREADS':'1','MKL_NUM_THREADS':'1'})
-            outcome['engine_returncode']=result.returncode
-            if result.returncode:outcome['error']=f'Engine exit {result.returncode}'
-            else:outcome['engine_status']='complete'
-        except subprocess.TimeoutExpired as error:outcome.update(engine_status='timed_out',error=f'{type(error).__name__}: {error}')
-        except OSError as error:outcome['error']=f'{type(error).__name__}: {error}'
-        if pair_check:
-            outcome['status']='success' if outcome['engine_status']=='complete' else 'failure'
-        else:
-            trajectory=None
-            try:
-                trajectory=read_trajectory(directory/'state_trajectory.csv')
-                trajectory.to_csv(directory/'state_trajectory.csv',index=False)
-                outcome.update(trajectory_rows=len(trajectory),trajectory_first_time_minutes=float(trajectory.time_minutes.iloc[0]),trajectory_last_time_minutes=float(trajectory.time_minutes.iloc[-1]),terminal_low=int(trajectory.n_low.iloc[-1]),terminal_high=int(trajectory.n_high.iloc[-1]),terminal_dead_low=int(trajectory.n_dead_low.iloc[-1]),terminal_dead_high=int(trajectory.n_dead_high.iloc[-1]))
-            except (OSError,ValueError,pd.errors.ParserError) as error:outcome['trajectory_error']=repr(error)
-            all_measured=not measure;any_measured=False
-            if measure:
-                values,available,records,parse_errors=support.measure_requested(directory/'output',times,lambda path:snapshot(path,spec['domain_size'],spec['field_shape'],spec['crop_origin']))
-                np.savez_compressed(directory/'observables.npz',times_minutes=times,predicted=values,requested_time_support=available,f_high=trajectory.f_high.to_numpy() if trajectory is not None else np.array([]))
-                outcome.update(snapshots=records,snapshot_parse_errors=parse_errors,requested_snapshots=len(times),measured_snapshots=int(available.sum()))
-                all_measured=bool(available.all()) and bool(np.isfinite(values).all());any_measured=bool(available.any())
-            endpoint_available=trajectory is not None and abs(float(trajectory.time_minutes.iloc[-1])-float(times[-1]))<=.500001
-            outcome['requested_terminal_time_available']=bool(endpoint_available)
-            complete=outcome['engine_status']=='complete' and endpoint_available and all_measured
-            outcome['status']='success' if complete else 'partial' if any_measured or trajectory is not None else 'failure'
+            trajectory=read_trajectory(compact/'state_trajectory.csv');native_stream.write_state_csv(compact/'state_trajectory.csv',trajectory)
+            outcome.update(trajectory_rows=len(trajectory),trajectory_first_time_minutes=float(trajectory.time_minutes.iloc[0]),trajectory_last_time_minutes=float(trajectory.time_minutes.iloc[-1]),terminal_low=int(trajectory.n_low.iloc[-1]),terminal_high=int(trajectory.n_high.iloc[-1]),terminal_dead_low=int(trajectory.n_dead_low.iloc[-1]),terminal_dead_high=int(trajectory.n_dead_high.iloc[-1]))
+        except (OSError,ValueError,pd.errors.ParserError) as error:outcome['trajectory_error']=repr(error)
+        endpoint_available=trajectory is not None and abs(float(trajectory.time_minutes.iloc[-1])-float(times[-1]))<=.500001
+        outcome['requested_terminal_time_available']=bool(endpoint_available)
+        complete=outcome['engine_status']=='complete' and endpoint_available and (not measure or bool(available.all()) and bool(np.isfinite(values).all()))
+        outcome['status']='success' if complete else 'partial' if available.any() or trajectory is not None else 'failure'
     except Exception as error:outcome['error']=f'{type(error).__name__}: {error}'
+    finally:
+        if directory.exists():shutil.rmtree(directory)
     outcome['wall_seconds']=time.monotonic()-start;outcome['peak_rss_kib']=resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-    atomic_json(directory/'outcome.json',outcome)
     return outcome
+
+
+def support_snapshot(frame,spec):
+    from core.transfer import snapshot_arrays
+    return snapshot_arrays(frame['x'],frame['y'],frame['total_volume'],frame['dead'],spec['domain_size'],spec['field_shape'],spec['crop_origin'])

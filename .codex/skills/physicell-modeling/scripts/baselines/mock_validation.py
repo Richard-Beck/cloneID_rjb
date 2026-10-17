@@ -55,6 +55,7 @@ def main(output=None):
     import synthetic_data
     synthetic_data.configure(config,out,fixture,sys.executable)
     config["lineage"].update(shared_starts=5,ridge_starts_per_alpha=3,replicates=3,alphas=[0.,7.])
+    config["lineage"]["native_pool"].update(shared=5,ridge_per_alpha=3)
     config["perspective"].update(starts_per_alpha=7,alphas=[0.,.5,8.])
     config["inputs"]["required"]=[p.name for p in sorted(fixture.iterdir())]
     config["inputs"]["prepared_hashes"]={p.name:w.sha(p) for p in sorted(fixture.iterdir())}
@@ -65,11 +66,11 @@ def main(output=None):
     check("preflight_rejects_execution",not preflight["execution_ready"])
     check("default_command_is_safe_dry_run",w.main(["--config",str(config_path),"--output",str(out/"default_dry_run")])==0)
     plan=w.dependency_plan(config,config_path,preflight)
-    check("nondefault_counts_shared_trajectories",sum(plan["nodes"][1]["trajectories_per_candidate"])==5*1*3)
-    check("nondefault_counts_ridge_trajectories",sum(plan["nodes"][4]["trajectories_per_candidate"])==2*3*1*2*3)
+    check("nondefault_counts_shared_trajectories",sum(next(n for n in plan["nodes"] if n["name"]=="lineage_shared_native")["trajectories_per_candidate"])==5*1*3)
+    check("nondefault_counts_ridge_trajectories",sum(next(n for n in plan["nodes"] if n["name"]=="lineage_ridge_native")["trajectories_per_candidate"])==2*3*1*2*3)
     check("nondefault_counts_perspective_fits",plan["common_totals"]["perspective_new_search_fits"]==3*7)
-    check("per_candidate_stream_commands_frozen",{"fit","finalize","simulate"}.issubset(plan["nodes"][1]))
-    check("dependency_failure_boundary",plan["nodes"][2]["condition"]=="afterany" and plan["nodes"][3]["condition"]=="afterok")
+    check("per_candidate_stream_commands_frozen",all(k in next(n for n in plan["nodes"] if n["name"]=="lineage_shared_fit") for k in ("fit","finalize")) and "simulate" in next(n for n in plan["nodes"] if n["name"]=="lineage_shared_native"))
+    check("dependency_failure_boundary",next(n for n in plan["nodes"] if n["name"]=="lineage_shared_native_select")["condition"]=="afterany" and next(n for n in plan["nodes"] if n["name"]=="report_accept_for_now")["condition"]=="afterany")
     run=w.prepare(config,config_path,"synthetic_validation_"+stamp)
     candidates=w.read(run/"lineage/shared_candidates.json")
     check("fresh_stratified_starts_have_no_parent",len(candidates)==5 and all("parent" not in c for c in candidates))
@@ -124,6 +125,10 @@ def main(output=None):
     terminal_mock.run(out,stamp,check,expect_failure)
     import robust_mock
     robust_mock.run(out,stamp,config,check,expect_failure)
+    import storage_aware_mock
+    storage_aware_mock.run(out,stamp,config,check,expect_failure)
+    import budget_harvest_mock
+    budget_harvest_mock.run(out,stamp,check,expect_failure)
     import portability_checks
     portability_checks.run(out,check)
     check("no_scientific_modules_imported",not [name for name in sys.modules if name.startswith(("lineage_model","perspective_model","perspective_search","wgd_colony","wgd_transfer","core."))])

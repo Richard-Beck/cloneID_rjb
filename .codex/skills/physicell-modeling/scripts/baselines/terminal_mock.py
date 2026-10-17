@@ -19,6 +19,8 @@ def run(out,stamp,check,expect_failure):
     prepared=synthetic_data.build(out/"invented_pilot_data")
     synthetic_data.configure(config,out,prepared,sys.executable)
     config["lineage"].update(shared_starts=5,ridge_starts_per_alpha=3,alphas=[0.,7.])
+    config["lineage"]["native_pool"].update(shared=5,ridge_per_alpha=3)
+    config["perspective"]["conditional"]["screen_candidates_per_alpha"]=10
     config["perspective"].update(starts_per_alpha=10)
     config["perspective"]["conditional"]["refinement_replicates"]=8
     config_path=out/"terminal_config.json";w.write(config_path,config)
@@ -208,7 +210,7 @@ def run(out,stamp,check,expect_failure):
     counts={"oxygen_values":sorted(data.dt),"episodes":len(episodes)}
     spec=s.campaign_spec(config,config_path,run,counts)
     plan=s.plan(spec,out/"scheduler",materialize=True)
-    check("scheduler_complete19node_chain_with_embedding_reducer",len(plan["nodes"])==19 and plan["nodes"][-1]["name"]=="report_accept_for_now" and any(n["name"]=="perspective_embedding_reduce" for n in plan["nodes"]))
+    check("scheduler_complete19node_chain_with_embedding_reducer",len(plan["nodes"])==26 and plan["nodes"][-1]["name"]=="budget_janitor" and any(n["name"]=="perspective_embedding_reduce" for n in plan["nodes"]))
     check("scheduler_no_post_validation_adaptive_nodes",spec["post_validation_adaptive_nodes"]==[] and plan["post_validation_adaptive_nodes"]==[])
     byname={n["name"]:n for n in plan["nodes"]}
     check("scheduler_terminal_native_counts",byname["perspective_screen_native"]["tasks"]==4480 and byname["perspective_final_native"]["tasks"]==1800)
@@ -217,20 +219,21 @@ def run(out,stamp,check,expect_failure):
     _,first_replica=s.task_context(refinement_manifest,8);_,last_replica=s.task_context(refinement_manifest,15)
     check("scheduler_refinement_slots_identify_source_and_replica",first_replica["source_candidate_index"]==1 and first_replica["refinement_replicate"]==0 and last_replica["source_candidate_index"]==1 and last_replica["refinement_replicate"]==7)
     check("scheduler_failed_native_diagnostics_and_report_still_run",byname["perspective_screen_diagnostics"]["condition"]=="afterany" and byname["perspective_final_diagnostics"]["condition"]=="afterany" and byname["report_accept_for_now"]["condition"]=="afterany")
-    check("scheduler_cpu_throttle_has_resource_reason",any("--array=0-4479%1000"==v for v in byname["perspective_screen_native"]["submit_command"]) and not any("%" in v for v in byname["lineage_shared_stream"]["submit_command"] if v.startswith("--array")))
-    manifest=byname["lineage_shared_stream"]["manifest_value"];groups=manifest["task_groups"];size=5
+    check("scheduler_cpu_throttle_has_resource_reason",any("--array=0-4479%999"==v for v in byname["perspective_screen_native"]["submit_command"]) and not any("%" in v for v in byname["lineage_shared_fit"]["submit_command"] if v.startswith("--array")))
+    manifest=byname["lineage_shared_fit"]["manifest_value"];groups=manifest["task_groups"];size=5
     check("stream_finalization_depends_on_own_fit",groups[size]["parent"]==0 and groups[size+1]["parent"]==1)
-    first_sim=groups[2*size]
+    manifest=byname["lineage_shared_native"]["manifest_value"];groups=manifest["task_groups"]
+    first_sim=groups[0]
     argv,context=s.task_context(manifest,first_sim.get("indices",list(range(first_sim["first"],first_sim["last"]+1)))[1])
     check("stream_native_dispatches_current_candidate_and_local_trajectory",context["candidate_index"]==0 and context["trajectory_index"]==1 and argv[argv.index("--trajectory")+1]=="1")
-    next_sim=groups[2*size+1];_,context=s.task_context(manifest,next_sim.get("indices",[next_sim["first"]])[0])
+    next_sim=groups[1];_,context=s.task_context(manifest,next_sim.get("indices",[next_sim["first"]])[0])
     check("stream_next_candidate_trajectory_resets_to_zero",context["candidate_index"]==1 and context["trajectory_index"]==0)
     for stage in ["shared","ridge"]:
-        node=byname["lineage_"+stage+"_stream"];stream_groups=node["manifest_value"]["task_groups"]
+        node=byname["lineage_"+stage+"_native"];stream_groups=node["manifest_value"]["task_groups"]
         score_groups=[g for g in stream_groups if g["phase"]=="score"]
         simulations={g["candidate"]:g.get("indices",list(range(g["first"],g["last"]+1))) for g in stream_groups if g["phase"]=="simulate"}
         check("stream_"+stage+"_score_waits_for_all_own_native_indices",len(score_groups)==len(simulations) and all(g["parents"]==simulations[g["candidate"]] for g in score_groups))
-        check("stream_"+stage+"_task_count_includes_per_candidate_scores",node["tasks"]==3*len(simulations)+sum(map(len,simulations.values())))
+        check("stream_"+stage+"_task_count_includes_per_candidate_scores",node["tasks"]==len(simulations)+sum(map(len,simulations.values())))
         for group,recipe in zip(stream_groups,node["configuration_commands"]):
             if group["phase"]!="score":continue
             expected="afterany:"+":".join("DRY_"+node["name"]+"_"+str(i) for i in group["parents"])
@@ -244,7 +247,7 @@ def run(out,stamp,check,expect_failure):
     # executor only. The outer audit hook rejects every real process invocation.
     submit_config=copy.deepcopy(config)
     submit_config["execution"].update(authorized=True)
-    submit_config["resources"].update(budget_cpu_hours_cap=9999.,scheduler_limits_verified=True)
+    submit_config["resources"].update(budget_cpu_hours_cap=1000.,scheduler_limits_verified=True)
     submit_config["test_only_authorization"]=True
     submit_config_path=out/"SYNTHETIC_AUTHORIZATION_ONLY.json";w.write(submit_config_path,submit_config)
     submit_run=w.prepare(submit_config,submit_config_path,"scheduler_synthetic_"+stamp)
@@ -263,12 +266,12 @@ def run(out,stamp,check,expect_failure):
         check("fake_scheduler_releases_only_after_all_dependencies",len(calls[first_release:])==len(plan["nodes"]) and all(argv[:2]==["scontrol","release"] for argv in calls[first_release:]))
         os.environ["SLURM_JOB_ID"]=jobs["report_accept_for_now"]
         raw="JobID|JobIDRaw|State|AllocCPUS|ElapsedRaw|TotalCPU|Submit|Eligible|Start|End|\n"
-        job=jobs["lineage_shared_stream"]
+        job=jobs["lineage_shared_fit"]
         for jid,state,cpu in [(job,"COMPLETED","00:01:00"),(job+"_0","COMPLETED","00:00:30"),(job+"_5","FAILED","00:00:10"),(job+"_5.batch","FAILED","00:00:10"),(jobs["report_accept_for_now"],"RUNNING","00:00:01")]:
             raw += jid+"|9999|"+state+"|1|60|"+cpu+"|2026-10-16T00:00:00+00:00|2026-10-16T00:01:00+00:00|2026-10-16T00:02:00+00:00|"+("Unknown" if state=="RUNNING" else "2026-10-16T00:03:00+00:00")+"|\n"
         queried=[]
         usage=s.collect_accounting(submit_run,executor=lambda argv:(queried.append(argv) or raw))
-        check("fake_accounting_maps_fit_finalize_and_excludes_parent_steps",set(usage["phases"])=={"lineage_shared_stream.fit","lineage_shared_stream.finalize","report_accept_for_now"} and usage["states"]=={"COMPLETED":1,"FAILED":1,"RUNNING":1})
+        check("fake_accounting_maps_fit_finalize_and_excludes_parent_steps",set(usage["phases"])=={"lineage_shared_fit.fit","lineage_shared_fit.finalize","report_accept_for_now"} and usage["states"]=={"COMPLETED":1,"FAILED":1,"RUNNING":1})
         snapshot=w.read(submit_run/"report/accounting_snapshot.json")
         check("fake_accounting_labels_current_report_snapshot_partial",snapshot["nonterminal_rows"]==[jobs["report_accept_for_now"]] and usage["phases"]["report_accept_for_now"]["failed_or_cancelled_tasks"]==0 and len(queried)==1)
         task_manifest=out/"fake_submitted/verify_frozen_inputs_tasks.json"

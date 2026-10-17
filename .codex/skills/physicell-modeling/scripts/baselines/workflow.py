@@ -27,7 +27,7 @@ PACKAGE = Path(__file__).resolve().parent
 DEFAULT_CONFIG = PACKAGE.parents[4]/"examples/sum159/baseline.json"
 VERSION = 1
 RUNTIME_COMMANDS = {
-    "lineage-fit", "lineage-finalize", "lineage-simulate", "lineage-score", "lineage-score-candidate",
+    "lineage-fit", "lineage-finalize", "lineage-simulate", "lineage-score", "lineage-score-candidate", "lineage-simulate-selected", "lineage-score-selected-candidate",
     "perspective-fit", "perspective-embedding-check",
     "perspective-native", "perspective-native-analyze", "perspective-refine",
 }
@@ -278,6 +278,21 @@ def preflight(config, config_path):
                 errors.append("Frozen field count/observation join mismatch: " + str(i))
                 break
         prepared = {"rows": len(rows), "episodes": len(episodes), "fields": len(fields), "assays": len(assays), "assay_cells": sum(a["n"] for a in assays), "oxygen_values": sorted({float(row["oxygen"]) for row in rows}), "even_depth_episodes": sum(v % 2 == 0 for v in depths.values()), "historical_image_paths_dereferenced": 0}
+    import storage_budget
+    storage=storage_budget.storage_plan(config,prepared)
+    errors.extend(storage['errors']);storage_inventory=None
+    roots=config['storage'].get('project_scope_roots',[])
+    if roots:
+        def scoped(value):
+            path=Path(value).expanduser();return path.resolve() if path.is_absolute() else (Path(config['_config_dir'])/path).resolve()
+        try:
+            inventory_file=config['storage'].get('inventory_file')
+            owned=[scoped(p) for p in roots];readonly=[scoped(p) for p in config['storage'].get('read_only_external_roots',[])]
+            storage_inventory=storage_budget.frozen_inventory(scoped(inventory_file),config['storage'].get('inventory_sha256'),owned,readonly,config['storage'].get('inventory_max_age_seconds',600)) if inventory_file else storage_budget.inventory(owned,readonly)
+            storage_inventory['verified']=True
+            if storage_inventory['bytes']+config['storage']['new_durable_bytes_reservation']>config['storage']['durable_limit_bytes']:errors.append('Actual project inventory plus reserved durable growth exceeds50GB')
+        except (OSError,ValueError) as error:errors.append('Project storage inventory: '+str(error))
+    else:blockers.append('Explicit project-owned home/shared/scratch roots and a fresh complete inventory are required before launch')
     imaging = validate_cellsegmentations(config)
     if imaging["status"] == "not_available":
         warnings.append(imaging["reason"])
@@ -293,7 +308,7 @@ def preflight(config, config_path):
         blockers.append("Compute-node environment, scheduler array/job limits and native transfer require execution-time checks; no probes or simulations were performed here")
     warnings.append("Configured compute interpreter dependencies and ELF shared libraries need compute-node verification; this inspection checks the active lightweight interpreter only")
     warnings.append("Microscopy and assay data share experimental ancestry; scores are composite summaries, not model evidence or Bayes factors")
-    return {"schema_version": VERSION, "time_utc": utc(), "setup_valid": not errors, "execution_ready": not errors and not blockers, "errors": errors, "execution_blockers": blockers, "warnings": warnings, "dependencies_active_interpreter": dependencies, "active_interpreter": sys.executable, "configured_compute_interpreter": str(resolve(config, "python")), "prepared_data": prepared, "imaging": imaging, "runtime_source_scan": runtime_scan, "config_sha256": sha(config_path), "scientific_modules_imported": [name for name in sys.modules if name.startswith(("lineage_model", "perspective_model", "perspective_search", "wgd_colony", "wgd_transfer", "core."))], "jobs_submitted": 0, "fits_or_simulations_run": 0}
+    return {"schema_version": VERSION, "time_utc": utc(), "setup_valid": not errors, "execution_ready": not errors and not blockers, "errors": errors, "execution_blockers": blockers, "warnings": warnings, "dependencies_active_interpreter": dependencies, "active_interpreter": sys.executable, "configured_compute_interpreter": str(resolve(config, "python")), "prepared_data": prepared, "storage_plan":storage,"storage_inventory":storage_inventory,"imaging": imaging, "runtime_source_scan": runtime_scan, "config_sha256": sha(config_path), "scientific_modules_imported": [name for name in sys.modules if name.startswith(("lineage_model", "perspective_model", "perspective_search", "wgd_colony", "wgd_transfer", "core."))], "jobs_submitted": 0, "fits_or_simulations_run": 0}
 
 
 def command(config_path, phase, *extra):
@@ -310,12 +325,12 @@ def dependency_plan(config, config_path, check):
     scheduler_plan=scheduler.plan(spec,resolve(config,"scratch_root")/"planning/scheduler",materialize=False)
     l=config["lineage"];p=config["perspective"];c=p["conditional"]
     oxygen=len(observed["oxygen_values"]);ridge_count=l["ridge_starts_per_alpha"]*len(l["alphas"])
-    shared_native=l["shared_starts"]*oxygen*l["replicates"]
-    ridge_native=ridge_count*oxygen*len(l["groups"])*l["replicates"]
+    shared_native=l["native_pool"]["shared"]*oxygen*l["replicates"]
+    ridge_native=l["native_pool"]["ridge_per_alpha"]*len(l["alphas"])*oxygen*len(l["groups"])*l["replicates"]
     selected=c["screen_candidates_per_alpha"]*len(p["alphas"])
     screen_native=selected*c["screen_replicates"]*(c["screen_passages"]+oxygen*len(c["minority_probe_fractions"]))
     final_native=c["finalists"]*c["final_replicates"]*(observed["episodes"]+oxygen*len(c["minority_probe_fractions"]))
-    return {"mode":"SETUP_ONLY_DRY_RUN","execution_ready":check["execution_ready"],"execution_blockers":check["execution_blockers"],"nodes":spec["nodes"],"scheduler_specification":spec,"common_totals":{"planned_tasks":scheduler_plan["total_array_tasks"],"lineage_new_fits":l["shared_starts"]+ridge_count,"lineage_native_trajectories":shared_native+ridge_native,"perspective_new_search_fits":p["starts_per_alpha"]*len(p["alphas"]),"perspective_bounded_refinement_slots":selected*c.get("refinement_replicates",1),"perspective_refinement_replicates":c.get("refinement_replicates",1),"perspective_screen_native_trajectories":screen_native,"perspective_final_native_trajectories":final_native,"perspective_all_native_trajectories":screen_native+final_native,"oxygen_levels":oxygen,"native_replicates_are_configurable":True},"terminal_policy":{"selected":"conditional_native_correction_refinement_independent_finalists","selection":"executed top5+5 screen rule, two anchors; two best distinct-source finalists plus competitive diverse third","screen_passages":c["screen_passages"],"screen_replicates":c["screen_replicates"],"final_passages":observed["episodes"],"final_replicates":c["final_replicates"],"acceptance":config["execution"]["acceptance_policy"],"post_validation_adaptive_nodes":[],"implementation_complete":True},"resource_plan":{"status":config["resources"]["status"],"fit_optimizer_allowance_cpu_hours":((l["shared_starts"]+ridge_count)*l["optimizer_seconds"]+p["starts_per_alpha"]*len(p["alphas"])*p["optimizer_seconds"]+selected*c.get("refinement_replicates",1)*c["refinement_seconds"])/3600,"fit_allowance_excludes":"JIT/start screening, finalization, analysis, failed attempts and reports; measure separately","lineage_native_timeout_ceiling_cpu_hours":(shared_native+ridge_native)*l["native_timeout_seconds"]/3600,"perspective_native_timeout_ceiling_cpu_hours":(screen_native+final_native)*p["native_timeout_seconds"]/3600,"relative_stage_deadlines":c["native_stage_deadline_seconds"],"deadline_origin":c["deadline_origin"],"historical_lineage_measured_cpu_hours":34.0167,"historical_lineage_allocated_cpu_hours":70.1492,"historical_usage_is_context_only":True,"elapsed_estimate":None,"queue_and_dependency_time":"Separate Eligible/Start timing where available; not CPU use"},"runtime_provenance":{"parameter_reuse":"none from historical runs","new_parent_source":"NEW_RUN/lineage/shared_scores.json, matching run/input identities and complete native support","measurement_reuse":config["inputs"]["scratch_boundary"],"config_sha256":sha(config_path)},"no_scheduler_calls":True,"no_scientific_imports":True}
+    return {"mode":"SETUP_ONLY_DRY_RUN","execution_ready":check["execution_ready"],"execution_blockers":check["execution_blockers"],"nodes":spec["nodes"],"scheduler_specification":spec,"common_totals":{"planned_tasks":scheduler_plan["total_array_tasks"],"lineage_new_fits":l["shared_starts"]+ridge_count,"lineage_native_trajectories":shared_native+ridge_native,"perspective_new_search_fits":p["starts_per_alpha"]*len(p["alphas"]),"perspective_bounded_refinement_slots":selected*c.get("refinement_replicates",1),"perspective_refinement_replicates":c.get("refinement_replicates",1),"perspective_screen_native_trajectories":screen_native,"perspective_final_native_trajectories":final_native,"perspective_all_native_trajectories":screen_native+final_native,"oxygen_levels":oxygen,"native_replicates_are_configurable":True},"terminal_policy":{"selected":"conditional_native_correction_refinement_independent_finalists","selection":"executed top5+5 screen rule, two anchors; two best distinct-source finalists plus competitive diverse third","screen_passages":c["screen_passages"],"screen_replicates":c["screen_replicates"],"final_passages":observed["episodes"],"final_replicates":c["final_replicates"],"acceptance":config["execution"]["acceptance_policy"],"post_validation_adaptive_nodes":[],"implementation_complete":True},"storage_plan":check.get("storage_plan"),"resource_plan":{"status":config["resources"]["status"],"fit_optimizer_allowance_cpu_hours":((l["shared_starts"]+ridge_count)*l["optimizer_seconds"]+p["starts_per_alpha"]*len(p["alphas"])*p["optimizer_seconds"]+selected*c.get("refinement_replicates",1)*c["refinement_seconds"])/3600,"fit_allowance_excludes":"JIT/start screening, finalization, analysis, failed attempts and reports; measure separately","lineage_native_timeout_ceiling_cpu_hours":(shared_native+ridge_native)*l["native_timeout_seconds"]/3600,"perspective_native_timeout_ceiling_cpu_hours":(screen_native+final_native)*p["native_timeout_seconds"]/3600,"relative_stage_deadlines":c["native_stage_deadline_seconds"],"deadline_origin":c["deadline_origin"],"historical_lineage_measured_cpu_hours":34.0167,"historical_lineage_allocated_cpu_hours":70.1492,"historical_usage_is_context_only":True,"elapsed_estimate":None,"queue_and_dependency_time":"Separate Eligible/Start timing where available; not CPU use"},"runtime_provenance":{"parameter_reuse":"none from historical runs","new_parent_source":"NEW_RUN/lineage/shared_scores.json, matching run/input identities and complete native support","measurement_reuse":config["inputs"]["scratch_boundary"],"config_sha256":sha(config_path)},"no_scheduler_calls":True,"no_scientific_imports":True}
 
 
 def stratified(bounds, count, seed):
@@ -385,6 +400,9 @@ def prepare(config, config_path, run_name):
     write(output/"lineage/shared_candidates.json", candidates)
     write(output/"plan.json", dependency_plan(config, config_path, check))
     write(output/"preflight.json", check)
+    import storage_budget
+    inventory=check.get("storage_inventory") or {"bytes":config["storage"]["existing_project_bytes_estimate"],"verified":False,"scope":"dry preparation estimate only; not launch-ready"}
+    storage_budget.initialize(output,config,inventory)
     return output
 
 
@@ -632,7 +650,49 @@ def salvage_perspective_checkpoints(run):
     return recovered
 
 
+def native_with_reservation(run,config,identity,key,callback):
+    import storage_budget
+    import native_stream
+    directory=Path(run)/'transient'/key
+    reserve,commit,release=storage_budget.asset_callbacks(run,config)
+    with storage_budget.reserve_case(run,config,key,directory) as limits:
+        native_stream.STORAGE_CONTEXT={**limits,'case_directory':str(directory),'trajectory_bytes':262144,'log_bytes':65536,'run_root':str(run),'run_id':identity['run_id'],'input_manifest_sha256':sha(Path(run)/'input_manifest.json'),'recognized_rows':config['storage']['figure_rows'],'figure_rows':config['storage']['figure_rows'],'figure_replicates':config['storage']['figure_replicates'],'reserve_asset':reserve,'commit_asset':commit,'release_asset':release}
+        limits['completion_verified']=False
+        try:
+            result=callback()
+            limits['completion_verified']=bool(native_stream.STORAGE_CONTEXT.get('_compact_finalized',False))
+            return result
+        finally:native_stream.STORAGE_CONTEXT=None
+
+
 def worker(config, config_path, run, phase, stage, index, trajectory):
+    import campaign_budget
+    if phase not in {'run-input-check','budget-start','budget-controller','budget-janitor','report-accept'} and not campaign_budget.admitted(run):
+        write(Path(run)/'budget/not_started'/(phase+'_'+stage+'_'+str(index)+'_'+str(trajectory)+'.json'),{'status':'not_started_budget','phase':phase,'index':index,'trajectory':trajectory,'scientific_model_called':False,'time_utc':utc()})
+        return
+    if phase=='budget-start':
+        execution_gate(config);run_check(run,config_path)
+        state=read(Path(run)/'storage/state.json')
+        if not state['inventory'].get('verified'):raise SetupError('Project-wide storage inventory is not verified')
+        return campaign_budget.initialize(run,config)
+    if phase=='budget-controller':
+        execution_gate(config);run_check(run,config_path)
+        return campaign_budget.controller(run,config)
+    if phase=='budget-janitor':
+        execution_gate(config);run_check(run,config_path)
+        return campaign_budget.janitor(run,config)
+    if phase=='lineage-native-select':
+        execution_gate(config);run,frozen,identity=run_check(run,config_path)
+        import native_pool
+        return native_pool.select(run,frozen,stage)
+    if phase in {'lineage-simulate-selected','lineage-score-selected-candidate'}:
+        pool_path=Path(run)/'lineage'/(stage+'_native_candidates.json');selected=read(pool_path)
+        proof=read(Path(run)/'lineage'/(stage+'_native_selection.json'))
+        if proof.get('pool_manifest_sha256')!=sha(pool_path) or proof.get('run_id')!=read(Path(run)/'run_identity.json')['run_id'] or proof.get('input_manifest_sha256')!=sha(Path(run)/'input_manifest.json'):raise SetupError('Native pool provenance mismatch')
+        if index>=len(selected):return unused_task(run,phase,index,len(selected))
+        entry=selected[index];manifest=Path(run)/'lineage'/(stage+'_candidates.json');original=read(manifest)
+        if proof.get('candidate_manifest_sha256')!=sha(manifest) or entry['candidate_index']>=len(original) or original[entry['candidate_index']]['id']!=entry['candidate_id'] or sha(Path(run)/'lineage/candidates'/entry['candidate_id']/'final.json')!=entry['final_sha256']:raise SetupError('Native pool candidate/final mapping changed')
+        index=entry['candidate_index'];phase='lineage-simulate' if phase=='lineage-simulate-selected' else 'lineage-score-candidate'
     # Non-scientific preparation is available independently; all science is gated.
     if phase=="lineage-ridge-prepare":
         return prepare_ridge(run)
@@ -690,16 +750,29 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
                 if destination.exists():raise SetupError("Native case attempt exists; no overwrite")
                 write(destination/"outcome.json",{"status":"not_started_deadline","slot":slot,"reason":"relative_native_stage_deadline_exhausted","scientific_model_called":False,"engine_started":False,"wall_seconds":0.})
                 return
-    os.environ.setdefault("NUMBA_CACHE_DIR",str(run/"cache/numba"))
+    os.environ["NUMBA_CACHE_DIR"]=str(run/"cache/numba")
     if phase not in RUNTIME_COMMANDS:
         raise SetupError("Unimplemented perspective terminal policy or dispatcher; see ISSUES.md: "+phase)
+    # Compiled code stays in process memory. Disabling only persistence preserves
+    # Numba's generated numerical kernels and avoids unbounded per-worker cache copies.
+    if not config['storage'].get('jit_disk_cache',False):
+        import numba
+        if not getattr(numba.njit,'_baseline_no_disk_cache',False):
+            original_njit=numba.njit
+            def memory_njit(*args,**kwargs):
+                kwargs['cache']=False
+                return original_njit(*args,**kwargs)
+            memory_njit._baseline_no_disk_cache=True
+            numba.njit=memory_njit
     sys.path.insert(0,str(PACKAGE/"vendor"))
+    from core import fitting as bounded_fitting
+    bounded_fitting.ATOMIC_JSON_BYTES_LIMIT=262144 if phase in {"lineage-fit","lineage-finalize","perspective-fit","perspective-refine"} else None
     if phase.startswith("lineage-"):
         import lineage_model as a
         a.ROOT=run/"lineage";a.ENGINE=resolve(config,"lineage_engine")
         a.ALPHAS=config["lineage"]["alphas"];a.REPLICATES=config["lineage"]["replicates"]
         a.NATIVE_SEED_BASE=config["lineage"]["seed_native"]
-        a.TIMEOUT=config["lineage"]["native_timeout_seconds"];a.OPTIMIZER_SECONDS=config["lineage"]["optimizer_seconds"];a.STEPS=config["lineage"]["steps"]
+        a.TIMEOUT=campaign_budget.clip_seconds(run,config["lineage"]["native_timeout_seconds"]);a.OPTIMIZER_SECONDS=campaign_budget.clip_seconds(run,config["lineage"]["optimizer_seconds"]);a.STEPS=config["lineage"]["steps"]
         if phase=="lineage-fit":
             candidate=a.candidate(stage,index)
             directory=a.ROOT/"candidates"/candidate["id"]
@@ -732,7 +805,7 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
             value=read(provenance)
             if value["run_id"]!=identity["run_id"] or value["final_sha256"]!=sha(directory/"final.json"):
                 raise SetupError("Trajectory parent finalization is foreign/modified")
-            a.simulate(stage,index,trajectory)
+            native_with_reservation(run,config,identity,"lineage_"+stage+"_"+str(index)+"_"+str(trajectory),lambda:a.simulate(stage,index,trajectory))
         elif phase=="lineage-score":
             a.score(stage)
             if stage=="shared":
@@ -746,7 +819,7 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
     else:
         import perspective_model as a
         import perspective_search as e
-        a.ROOT=run/"perspective";e.ROOT=a.ROOT;e.SECONDS=config["perspective"]["optimizer_seconds"]
+        a.ROOT=run/"perspective";e.ROOT=a.ROOT;e.SECONDS=campaign_budget.clip_seconds(run,config["perspective"]["optimizer_seconds"])
         a.ALPHAS=config["perspective"]["alphas"];a.STEPS=config["perspective"]["steps"]
         data_class=a.Data
         a.Data=lambda: data_class(steps=config["perspective"]["steps"])
@@ -775,7 +848,7 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
             import native_diagnostics as native
             wgd_transfer.ENGINE=resolve(config,"perspective_engine")
             native.ROOT=a.ROOT;native.a=a;native.native=wgd_transfer
-            native.TIMEOUT=config["perspective"]["native_timeout_seconds"]
+            native.TIMEOUT=campaign_budget.clip_seconds(run,config["perspective"]["native_timeout_seconds"])
             native.SEED=config["perspective"]["seed_native"]
             native.BOOT=config["perspective"]["conditional"]["bootstrap_replicates"]
             native.PROBE_FRACTIONS=config["perspective"]["conditional"]["minority_probe_fractions"]
@@ -784,7 +857,7 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
                 slots=read(a.ROOT/stage/"slots.json")
                 slot=slots[index];directory=a.ROOT/stage/"cases"/slot["candidate_id"]/f"{index:05}"
                 if directory.exists():raise SetupError("Native case attempt exists; no overwrite or automatic retry")
-                native.run(stage,index)
+                native_with_reservation(run,config,identity,"perspective_"+stage+"_"+str(index),lambda:native.run(stage,index))
             elif phase=="perspective-native-analyze":
                 selected=read(a.ROOT/stage/"candidates.json");cid=selected[index]["id"]
                 destination=a.ROOT/stage/"analysis"/cid
@@ -806,7 +879,7 @@ def worker(config, config_path, run, phase, stage, index, trajectory):
                     write(destination/"outcome.json",eligibility)
                     if eligibility["status"]=="failed":raise SetupError("Refinement unavailable: "+eligibility["reason"])
                     return
-                try:native_refinement.run(source_index,seconds=config["perspective"]["conditional"]["refinement_seconds"],replicate=replicate)
+                try:native_refinement.run(source_index,seconds=campaign_budget.clip_seconds(run,config["perspective"]["conditional"]["refinement_seconds"]),replicate=replicate)
                 except Exception as error:
                     write(destination/"outcome.json",{"status":"failed","candidate_id":cid,"error":repr(error),"traceback":traceback.format_exc(),"scores_fabricated":False})
                     raise
@@ -901,6 +974,17 @@ def report_run(run):
     result["perspective"]={"terminal_policy":config["execution"]["terminal_policy"],"terminal_workers_implemented":True,"parents":read(parent_path) if parent_path.exists() else None,"embedding":read(embedding_path) if embedding_path.exists() else None,"exploratory_outcomes":outcomes,"refinement_outcomes":refinement,"finalists":finalists,"requested_finalist_quota":config["perspective"]["conditional"]["finalists"],"actual_finalists":len(finalists),"native":native,"acceptance":acceptance,"selection_audit":read(root/"audit/finalist_selection.json") if (root/"audit/finalist_selection.json").exists() else None}
     result["complete_scientific_baseline"]=diagnostics_complete and quota_complete and all(result["lineage"][stage]["fully_supported_candidates"]>0 for stage in ("shared","ridge"))
     result["degraded_evidence"]=not result["complete_scientific_baseline"]
+    result["budget_terminal"]=read(run/"budget_terminal.json") if (run/"budget_terminal.json").exists() else None
+    saved=result["budget_terminal"] or {}
+    acceptance["saved_fit_count"]=saved.get("selected_fit_count",0)
+    acceptance["saved_perspective_fit_count"]=len(saved.get("perspective",{}).get("selected",[]))
+    acceptance["saved_lineage_fit_count"]=sum(len(saved.get("lineage",{}).get(stage,{}).get("selected",[])) for stage in ("shared","ridge"))
+    acceptance["saved_fit_available"]=acceptance["saved_perspective_fit_count"]>0
+    if not finalists and acceptance["saved_fit_available"]:
+        acceptance.update(decision="accept_saved_fit_for_now",validation_status="incomplete_saved_evidence",terminal_fit_available=True)
+    acceptance["full_scientific_completion"]=result["complete_scientific_baseline"]
+    result["execution_budget"]=read(run/"budget/clock.json") if (run/"budget/clock.json").exists() else None
+    result["storage_plan"]=read(run/"storage/plan.json") if (run/"storage/plan.json").exists() else None
     records=[]
     for path in sorted((run/"accounting").glob("*.json")):
         value=read(path);records.append(value)
@@ -917,7 +1001,7 @@ def report_run(run):
     for stage in ("shared","ridge"):
         value=result["lineage"][stage];text.append("| lineage "+stage+" | "+value["status"]+" | "+json.dumps(value["candidate_outcomes"])+" |")
     for stage,value in native.items():text.append("| perspective "+stage+" | "+str(len(value["diagnostics"]))+" candidate diagnostics | "+json.dumps(value["case_outcomes"])+" |")
-    text += ["","Finalists retained: "+str(len(finalists))+" of configured quota "+str(config["perspective"]["conditional"]["finalists"])+". Degraded evidence: "+str(result["degraded_evidence"])+".","","Ranking bases: "+json.dumps([{key:c.get(key) for key in ("id","source_id","ranking_basis","native_support")} for c in finalists])+". Partial native objectives and approximation fallbacks are labeled separately; missing components and trajectories are never assigned zero loss."]
+    text += ["","Saved-fit availability by baseline: lineage="+str(acceptance["saved_lineage_fit_count"])+", perspective="+str(acceptance["saved_perspective_fit_count"])+". A lineage-only checkpoint does not establish a perspective fit.","","Finalists retained: "+str(len(finalists))+" of configured quota "+str(config["perspective"]["conditional"]["finalists"])+". Degraded evidence: "+str(result["degraded_evidence"])+".","","Ranking bases: "+json.dumps([{key:c.get(key) for key in ("id","source_id","ranking_basis","native_support")} for c in finalists])+". Partial native objectives and approximation fallbacks are labeled separately; missing components and trajectories are never assigned zero loss."]
     text += ["","Microscopy, assay deviance, ridge regularization, closure guidance, projected composition diagnostics and source hashes remain separate in results.json. Final diagnostics keep the physical parameter vector fixed.","","Measured worker CPU-hours: "+str(result["worker_compute_usage"]["measured_worker_cpu_hours"])+". Full measured-versus-allocated SLURM accounting: "+("attached in compute_usage.json" if result["compute_usage"] is not None else "not supplied; no allocation or queue measurements inferred"),"","This report only reads saved evidence. It invokes no scientific model, optimizer, simulator or scheduler.",""]
     (output/"REPORT.md").write_text("\n".join(text))
     return output/"REPORT.md"
@@ -935,6 +1019,7 @@ def main(argv=None):
     parser.add_argument("--manifest",type=Path)
     parser.add_argument("--manifest-sha256")
     args=parser.parse_args(argv)
+    if args.command in {"worker","dispatch"}:resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     try:
         config=load_config(args.config)
         if args.output is None:args.output=resolve(config,"scratch_root")/"planning"

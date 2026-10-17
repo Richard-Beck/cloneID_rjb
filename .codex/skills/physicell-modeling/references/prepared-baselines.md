@@ -25,8 +25,9 @@ The mock command uses synthetic fixtures. A real dry run requires the configured
 writes a plan without fitting, simulating or contacting SLURM. The example keeps execution disabled. `preflight` distinguishes setup
 validation from permission/resource readiness; a strict readiness failure is not evidence that a scientific run occurred.
 
-Read [the example](../../../../examples/sum159/README.md) for completed pilot results, the first fresh attempt and local-path configuration.
-That attempt completed lineage fitting and stopped before perspective fitting because its competitive-parent prerequisite was unmet.
+Read [the example](../../../../examples/sum159/README.md) for completed pilot results, fresh-attempt outcomes and local-path configuration.
+The first fresh attempt stopped at an overly strict competitive-parent prerequisite; that quality cutoff is now a preference with
+explicit fallbacks. A later attempt completed all approximation fits but exhausted storage during native evaluation and was canceled.
 Synthetic/static coverage and partial scientific execution do not establish successful end-to-end calibration.
 
 ## SUM-159 model and observations
@@ -61,15 +62,16 @@ native score, never the optimizer score as a substitute.
 The public configuration and numerical source encode the following procedure, with deterministic seeds and tie-breaking. Freeze their
 identities with prepared inputs before a new run. These counts describe the pilot adapter, not mandatory defaults for every study.
 
-1. Fit 512 fresh shared lineage starts. Evaluate their final vectors with two native seeds and rank the supported results. Fit 100
-   founder-ridge starts at each alpha in 0, 1, 10, 100 and 1000 from those new parents; evaluate final vectors and retain shared anchors.
-2. Generate 1,000 perspective exploratory starts from this run's competitive shared parents, across four configured regularization
+1. Fit 512 fresh shared lineage starts. Select a bounded pool of 256 final vectors for evaluation with two native seeds and rank the
+   supported results. Fit 100 founder-ridge starts at each alpha in 0, 1, 10, 100 and 1000 from those new parents; evaluate 40 per alpha
+   (200 total) with two native seeds and retain shared anchors. Preserve the pool-to-original-candidate mapping and final-vector hashes.
+2. Generate 996 perspective exploratory starts (249 per alpha) from this run's competitive shared parents, across four configured regularization
    strengths. Check the shared embedding and retain the permanent shared anchors.
-3. Screen 40 candidates: five best objective values plus five maximin parameter-diverse choices per alpha. Diversity choices come from
+3. Screen 24 candidates: five best objective values plus one maximin parameter-diverse choice per alpha. Diversity choices come from
    the best 60% of valid candidates, with a pool floor of 30 and cap of 100, using normalized/transformed parameter distances. The two
    shared anchors replace the final diversity slots in the first two alpha buckets.
 4. Evaluate 24 selected passages with two native seeds plus same-oxygen minority probes at 1%, 5%, 95% and 99%. Record failures and
-   calculate native diagnostics. Run eight independent local refinements, each bounded at 100 seconds, for eligible non-anchor sources
+   calculate native diagnostics. Run four independent local refinements, each bounded at 100 seconds, for eligible non-anchor sources
    with an available correction, matching source/correction vectors and finite native microscopy bias. Partial support remains labelled;
    anchors and unavailable/invalid corrections receive explicit outcomes.
 5. Rank supported original/refined options by corrected approximation microscopy + native-screen bias + corrected assay deviance +
@@ -89,11 +91,22 @@ finalist selection deduplicates sources rather than treating refinement replicas
 
 ## Execution and reporting
 
-Inspect the concrete dry-run dependency plan and agree a resource envelope before scientific submission. Synthetic checks and a saved
-plan are useful preparation, not authorization to launch. Use SLURM for substantial work, honor the agreed campaign CPU cap and retain
+Inspect the concrete dry-run dependency plan against the authorized resource envelope before scientific submission. Synthetic checks
+and a saved plan are useful preparation; existing user authorization governs whether to launch. Use SLURM for substantial work, honor the agreed campaign CPU cap and retain
 completed results on failure. Resume only the requested missing work rather than silently expanding the campaign. Queue delay must not
 consume a scientific stage allowance. Per-case engine timeouts bound failed simulations; saved snapshots at the exact requested times
 can still contribute explicit partial evidence. After individual worker failures, dependent reducers and reporting still run.
+
+The project default is at most 1,000 concurrent CPU cores for one hour, with a 1,000 CPU-hour ceiling. The controller reserves one
+core, leaving at most 999 worker cores. Scientific work is harvested 55 minutes after the allocated budget-start job begins, leaving five minutes for saved-evidence
+reporting and cleanup. Subsequent queue waits are visible in this execution clock; the utilization replay removes scheduler waiting
+separately. A budget limit produces a clearly labelled partial result rather than
+discarding completed work. Actual completion time and CPU use remain measured outcomes.
+
+Count all project-created copies toward the 50 GB durable / 100 GB transient storage limits, including shared and node-local copies.
+Validate the retained project footprint before submission. Native workers stream bounded cell frames to the existing observer, save
+compact metrics and selected figure fields, and discard raw fields after measurement. Worker reservations, retained metrics, field
+staging and cleanup overlap must all fit the declared envelope. Reporting and cleanup run after failure or cancellation too.
 
 The runner records source/input identities, task outcomes and selections. Report measured CPU use separately from allocation and
 elapsed time, include failed/cancelled work in campaign accounting, and state whether any live report-job snapshot is partial.

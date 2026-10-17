@@ -321,9 +321,9 @@ def finalist_choice(records,config):
     return finalists,details
 
 
-def select_finalists(run):
+def finalist_evidence(run):
+    """Read saved screen/refinement evidence without writing or scheduling work."""
     run,config,identity=w.run_check(run);root=run/"perspective"
-    if (root/"finalists.json").exists():raise w.SetupError("Finalist selection already frozen; no overwrite")
     if (root/"screen/support_manifest.json").exists():verify_native_stage(run,"screen")
     manifest=root/"screen/candidates.json"
     if not manifest.exists():manifest=root/"screen_candidates.json"
@@ -396,6 +396,14 @@ def select_finalists(run):
                 accepted.append(dict(base,id=cid,x=source_value["x"],source=str(source.relative_to(root)),source_sha256=w.sha(source),correction=None,selection_score=sum(terms),ranking_basis="native_screen_uncorrected_composite" if support=="complete" else "native_partial_uncorrected_composite",corrected_cohort_microscopy=None,native_image_bias=None,corrected_assay_deviance=source_value["assay_deviance"],ridge_penalty=source_value["ridge_penalty"],physical_refined=False))
             else:excluded.append({"id":cid,"reason":"nonfinite_native_source_selection_terms"})
         records.extend(accepted)
+    return {"native_records":records,"approximation_records":fallback_records,"excluded":excluded,"limitations":limitations}
+
+
+def select_finalists(run):
+    run,config,identity=w.run_check(run);root=run/"perspective"
+    if (root/"finalists.json").exists():raise w.SetupError("Finalist selection already frozen; no overwrite")
+    evidence=finalist_evidence(run)
+    records=evidence["native_records"];fallback_records=evidence["approximation_records"];excluded=evidence["excluded"];limitations=evidence["limitations"]
     fallback_used=not bool(records)
     if fallback_used:records=fallback_records
     records.sort(key=lambda v:(v["selection_score"],v["id"]))

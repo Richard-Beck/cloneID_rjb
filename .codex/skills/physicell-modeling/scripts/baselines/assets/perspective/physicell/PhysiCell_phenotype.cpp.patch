@@ -1,0 +1,21 @@
+--- a/core/PhysiCell_phenotype.cpp
++++ b/core/PhysiCell_phenotype.cpp
+@@ -275,6 +275,9 @@
+ 	return phase_links[start_index][ inverse_index_maps[start_index][end_index] ]; 
+ }
+ 	
++// RUN-LOCAL WGD extension: intercepted BEFORE native division flag / split.
++extern bool wgd_before_m_exit(Cell*, Phenotype&, double);
++
+ void Cycle_Model::advance_model( Cell* pCell, Phenotype& phenotype, double dt )
+ {
+ 	int i = phenotype.cycle.data.current_phase_index; 
+@@ -320,6 +323,8 @@
+ 			
+ 			if( continue_transition )
+ 			{
++				if(phases[i].division_at_phase_exit && phases[i].code==PhysiCell_constants::M_phase && !phenotype.death.dead)
++				{ if(wgd_before_m_exit(pCell,phenotype,dt)) {return;} }
+ 				// if the phase transition has an exit function, execute it
+ 				if( phase_links[i][k].exit_function )
+ 				{
