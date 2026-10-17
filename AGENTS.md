@@ -8,6 +8,33 @@ editor_options:
 
 Ignore all skills in the deprecated_skills folder.
 
+## Storage and compute budgets (2026-10-17)
+
+Before substantial work, read project-local resource rules and the user's current budget. If no explicit rules are available, assume a
+20 GB total disk cap and up to 32 CPU cores for 2 hours (64 CPU-hours), state those assumptions to the user, and plan within them.
+Existing explicit instructions override these defaults; do not repeatedly ask for an already specified budget.
+
+For cloneID_rjb, the default budgets are:
+
+- **Durable storage: 50 GB for the whole project.**
+- **Transient peak storage: 100 GB for the whole project during an active task**, returning to at most 50 GB after completion,
+  failure or cancellation.
+- **Compute: up to 1,000 concurrent CPU cores for 1 hour**, with a maximum of 1,000 CPU-hours, unless the user specifies otherwise.
+
+GB means 1,000,000,000 bytes. Storage includes all project-created files: the checkout, local data, runs, temporary files, caches,
+archives and copies on shared or node-local storage. Symlinks and moving files to another volume do not remove them from this budget.
+Shared source data maintained independently of this project, such as CellSegmentations, are excluded; project-created copies count.
+
+Estimate current durable use, peak concurrent output and inode demand before launch. Use task-scoped scratch, bounded concurrency or
+disk reservations, and prompt measurement/compaction so simulations do not accumulate unbounded raw output. Retain compact prepared
+inputs, fitted parameters, scores, provenance, accounting and the small selection of fields needed for reporting. Remove expendable
+raw trajectories, duplicate copies and temporary products after measurement, including on failures and cancellation. Reclaim external
+shared-storage products as well as files under the checkout. Never expand storage silently or substitute a larger filesystem for a cap.
+
+Respect disk and compute limits while finishing the workflow: harvest available checkpoints, report incomplete or poor results honestly,
+and run cleanup instead of abandoning the report at a quality threshold or resource limit. Report measured CPU-hours, elapsed time and
+post-cleanup storage. Resource budgets do not authorize deleting source code, irreplaceable input evidence or another agent's active work.
+
 ## Current direction (2026-10-16)
 
 Stricken text below (2026-09-21) is not necessarily entirely superseded but should be viewed with healthy skepticism. 

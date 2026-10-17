@@ -16,6 +16,10 @@ The bundled runtime handles custom initial phase/volume state, sampling and virt
 
 ## Budget and starts
 
+Resolve project-local disk and CPU limits first. Without explicit rules, state a 20 GB total storage cap and up to 32 cores for
+2 hours (64 CPU-hours). Explicit user/project budgets override these assumptions. Include existing project data and all external
+copies in the disk inventory; filesystem-wide free space is not proof of usable quota.
+
 Before proposing budgets, run light timing smoke tests using baseline/default parameters at operating points drawn from observed
 field densities: include typical seeding, terminal harvest and the densest observed fields. Briefly initialize, burn in/relax,
 then measure throughput. Record initialization, relaxation, subsequent simulation and output-measurement costs separately,
@@ -26,7 +30,7 @@ Present implementation effort, data preparation/correctness checks, optimizer st
 concurrency, reporting allowance, per-stage elapsed time/CPU-hours and total budget. Ask about faster first-pass versus broader
 search preferences when not already settled. Distinguish measured extrapolations, hypothetical scenarios and timeout ceilings;
 dense/slow fitted cases may cost more than default parameters. Include queue time separately. Agree available CPUs and the
-resource envelope; no unspecified overall CPU-hour cap is implied. Development used 100 starts/group/stage, five-minute limits,
+resource envelope; use its explicit or stated-default CPU/time limits. Development used 100 starts/group/stage, five-minute limits,
 600 integration steps and up to 200 CPUs; these are configurable proposals, not authorization or universal defaults.
 A per-engine timeout differs from a task limit; include checkpoint/export and reporting allowance. Budget the complete baseline
 as one campaign, not separately approved stage rollouts.
@@ -53,6 +57,17 @@ search_objective = observed_data_loss + penalty_weight * penalty
 Default penalty_weight is 1; thresholds derive from the baseline adhesion geometry. It discourages a particular closure violation;
 it does not predict every transfer error. Report it separately, including violation duration and extrema. Agreement is descriptive,
 not a hard gate, and cannot discard an otherwise scorable simulator result.
+
+## Storage lifecycle
+
+Estimate durable bytes, per-case peak bytes, concurrent scratch and inode demand alongside CPU/runtime. Bound their aggregate across
+all storage locations. Measure and save compact observer outputs before removing raw trajectories; preserve support masks, failure
+outcomes, hashes and the limited fields needed for the final report. Releasing a disk reservation requires deleting its temporary
+files. Do not accumulate every exploratory field or manufacture extra copies as a backup.
+
+Use task cleanup plus an end-of-campaign cleanup that also runs after failures or cancellation. At resource limits, harvest available
+checkpoints and report incomplete evidence rather than abandoning reporting. Record final durable use and confirm temporary shared
+and node-local products were reclaimed. Removing irreplaceable inputs or unrelated work still requires appropriate authorization.
 
 ## Nested stages
 

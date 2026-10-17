@@ -90,9 +90,16 @@ parallel as their prerequisites finish, sharing one 1,000-CPU cap. Long 0% oxyge
 and reporting retain small allocations. Aggregate stage deadlines are disabled so queue waiting cannot exhaust scientific work;
 individual engine timeouts remain. Planning estimates are about 513 CPU-hours and 68–85 minutes before external queue delays, including
 additional refinement breadth; these are estimates, not a CPU-hour or wall-time cap. Replacement run
-`20261017_152845_sum159_baseline_scratch` passed compute-node preflight and launched on 2026-10-17. All 512 fresh shared-fit workers
-started; the full 19-job, 35,394-slot campaign is submitted. Scientific results remain pending. Its source, prepared inputs, engine
-identities, selection rules and configuration are frozen in that local run.
+`20261017_152845_sum159_baseline_scratch` passed preflight and launched on 2026-10-17, then was canceled after home storage rejected
+writes during ridge evaluation. All 512 shared and 500 ridge fits completed. The shared stage had 238 fully supported candidates and
+best native loss 8.7152; ridge validation was incomplete and perspective fitting had not started. Total measured use was 203.0114
+CPU-hours including preflight and storage recovery. Compact parameters, scores, source/input identities and accounting are retained;
+bulk fields and external copies are being reclaimed. The expansion above describes that canceled attempt, not an accepted full fit.
+
+The replacement workflow must obey [AGENTS.md](../../AGENTS.md): 50 GB durable storage, 100 GB transient peak across every volume, and
+up to 1,000 cores for one hour. It is being changed to measure bounded native frames as they arrive, discard unselected raw output and
+retain only compact evidence plus the selected report fields. A new run starts from prepared data and fresh parameters. It will not
+reuse the canceled run's fitted vectors. Its final plan and source identity will be recorded before launch.
 
 Poor fits, missing native cases and scarce screen/finalist pools produce a result with explicit limitations rather than stopping solely
 on quality or coverage. Fully supported scores rank ahead of partial evidence, and partial losses are compared only on matching support.
@@ -128,5 +135,5 @@ the remaining readiness requirements. Synthetic checks validate software behavio
 inputs/configuration, executes the bounded screen/refinement/independent-validation procedure, reports diagnostics and accepts the
 fit for now. Further testing on an alternative lineage follows that demonstration.
 
-Full campaigns, detailed measurements and private provenance remain local. The reusable runner/configuration and selected figure/text
+Compact run records, prepared measurements and private provenance remain local; expendable raw simulation output is removed. The reusable runner/configuration and selected figure/text
 are tracked; encrypted local-data snapshots are handled through the repository's [publishing workflow](../../docs/publishing.md).

@@ -30,6 +30,18 @@ Use only CellSegmentations, recursively including segmentation masks and per-cel
 `CELLSEGMENTATIONS_ROOT` or an explicit path. `/share/lab_crd/CellSegmentations` is the RED location; the workstation has its own mount.
 Keep manifest paths relative to the root and verify image/mask/feature matches before using them. Never fall back to another collection.
 
+## Resolve disk and compute budgets
+
+Read project-local resource rules and the user's current limits before substantial work. If disk limits are unspecified, assume
+20 GB total project-created storage. If CPU limits are unspecified, assume up to 32 concurrent cores for 2 hours (64 CPU-hours).
+State any default assumptions to the user; explicit project or user budgets take precedence without another approval checkpoint.
+
+Budget durable data and peak transient output across the checkout, shared volumes, node-local scratch, caches and duplicate copies.
+A larger filesystem or symlink does not increase the allowance. Measure representative output bytes/inodes and reserve concurrent
+scratch before launch. Score and compact native outputs promptly; retain parameters, metrics, provenance, accounting and only the
+small selection of fields needed for reporting. Clean expendable raw outputs on success, failure and cancellation. Storage exhaustion
+or a time limit must still produce an honest partial report and cleanup. Follow the local retention budget after the task ends.
+
 ## Establish the scientific contract
 
 Read [scientific decisions](references/scientific-decisions.md) and the associated [canonical model](references/canonical-model.md).
@@ -70,7 +82,7 @@ embedded parents as permanent candidates. Use deterministic seeds and score/ID t
 Before proposing the campaign budget, use light runtime benchmarks at representative observed densities, including dense
 harvest fields, unless applicable measured timings already exist or the user requests otherwise. Discuss implementation effort,
 search breadth, simulation and reporting costs, per-stage elapsed time/CPU-hours and total resources; agree the user's preferred
-resource envelope. Numerical defaults are proposals, never agreed budgets. See execution.md for timing and budgeting details.
+resource envelope. Use the explicit budget or the stated default above. See execution.md for timing, storage and budgeting details.
 
 Submit the agreed models, phases and report in one dependency campaign, with no unnecessary intermediate user checkpoints. Within each
 stage, queue each candidate's PhysiCell evaluations as its optimization finishes; share one CPU cap across fitting, finalization

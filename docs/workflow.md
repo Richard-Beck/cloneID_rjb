@@ -4,6 +4,14 @@ The baseline is a fitted mechanistic account against which a biological hypothes
 compared. Two definitions are supported: lineage-determined identity follows recorded lineage relationships; perspective-guided
 identity follows states defined by investigator-chosen accompanying measurements. SUM-159 progressive hypoxia is the pilot example.
 
+## Resource envelope
+
+Read `AGENTS.md` and the current user constraints first. This project allows 50 GB durable storage, a transient peak of 100 GB with
+cleanup afterwards, and defaults to up to 1,000 cores for one hour. Count project-created data on home, shared and node-local storage,
+including duplicate copies. For a project without explicit rules, state assumptions of a 20 GB total disk cap and 32 cores for two
+hours. Plan output retention and cleanup with the compute work; keep compact metrics and selected report fields instead of every raw
+simulation. Limits must leave enough capacity to report partial results and clean up.
+
 ## Prepare the evidence
 
 1. Use [cloneid-database-data](../.codex/skills/cloneid-database-data/SKILL.md) to validate a local cloneID snapshot and reconstruct the
@@ -59,6 +67,9 @@ The reusable fresh-fit runner has synthetic checks and a recorded scientific att
 lineage fitting and stopped because an initialization rule required two competitive shared parents. The selected lineage fit was
 weaker than the accepted pilot. The revised runner removes that quality gate and widens the search to 512 shared starts, 500
 founder-specific starts, 1,000 perspective starts and eight bounded refinement starts per eligible source, under one 1,000-CPU cap.
-Replacement run `20261017_152845_sum159_baseline_scratch` passed compute-node preflight and is running. The first attempt's full
+Replacement run `20261017_152845_sum159_baseline_scratch` passed preflight and completed all 1,012 lineage fits, then was canceled
+after storage exhaustion during ridge simulation evaluation. It used 203.0114 CPU-hours including storage recovery and preflight.
+Compact records and selected figure evidence remain; bulk outputs and the shared-storage copy are being reclaimed. A fresh bounded
+storage workflow is being prepared within the 50 GB durable / 100 GB transient limit and one-hour compute window. The first attempt's full
 outputs were erased at the user's request; its published summary remains historical evidence. Complete fresh-workflow fit quality remains to be demonstrated; the [example](../examples/sum159/README.md) records the stopped attempt and its resource use.
 Testing on an alternative lineage remains subsequent work.
