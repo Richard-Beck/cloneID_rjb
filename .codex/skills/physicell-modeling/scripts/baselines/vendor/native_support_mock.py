@@ -174,7 +174,7 @@ class TransferChecks(unittest.TestCase):
     def test_timeout_preserves_earlier_exact_observations(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory=Path(temporary)/'case';compact=directory.parent
-            def export(folder,spec,override):folder.mkdir();return {},np.array([0.,30.])
+            def export(folder,spec,override):folder.mkdir();return {'sampling_plan':transfer.native_stream.sampling_plan([0.,30.])},np.array([0.,30.])
             def execute(*args,**kwargs):
                 trajectory(compact/'state_trajectory.csv',last=0.)
                 return dict(status='partial',engine_status='timed_out',requested_time_support=np.array([True,False]),predicted=np.vstack([np.ones(30),np.full(30,np.nan)]))

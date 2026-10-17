@@ -112,7 +112,9 @@ def export_case(directory, p, rate, seed, times, domain_size,
                 dead_duration_hours=8.6, initial_dead_fraction=0.):
     W, H = domain_size
     p = np.asarray(p, float)
-    times = np.unique(np.ceil(np.asarray(times, float)/mechanics_minutes)*mechanics_minutes)
+    import native_stream
+    sample_plan=native_stream.sampling_plan(times,mechanics_minutes)
+    times=np.asarray(sample_plan['frame_times_minutes'],float)
     if (len(times) == 0 or times.min() < 0 or rate <= 0 or death_per_day < 0
             or dead_duration_hours <= 0):
         raise ValueError('Invalid rate/death/sample times')
@@ -120,7 +122,6 @@ def export_case(directory, p, rate, seed, times, domain_size,
     d.mkdir(parents=True, exist_ok=False)
     (d/'output').mkdir()
     ic, meta = initial(p, seed, domain_size, post_g1_minutes, initial_dead_fraction)
-    import native_stream
     native_stream.write_initial_csv(ic,d/'initial_cells.csv')
     np.savetxt(d/'sample_times.txt', times, fmt='%.8f')
     tree = ET.parse(Path(__file__).resolve().parents[1]/'assets/physicell/PhysiCell_settings.xml')
@@ -150,6 +151,7 @@ def export_case(directory, p, rate, seed, times, domain_size,
     put('user_parameters/mechanics_voxel_size', max(40, 2.5*p[3]*(2*max(1, p[6]))**(1/3)+5))
     tree.write(d/'PhysiCell_settings.xml', encoding='utf-8', xml_declaration=True)
     (d/'cell_rules.csv').write_text(f'default,pressure,decreases,cycle entry,0,{p[2]:.17g},2,0\n')
+    meta['sampling_plan']=sample_plan
     meta.update(death_per_day=float(death_per_day), dead_duration_hours=float(dead_duration_hours),
                 initial_dead_fraction=float(initial_dead_fraction),
                 corpse_mechanics='original passive adhesion/repulsion; no division',

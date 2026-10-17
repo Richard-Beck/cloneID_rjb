@@ -75,6 +75,45 @@ def case_directory(compact_parent,default=None):
     return Path(chosen(compact_parent) if callable(chosen) else chosen)
 
 
+
+def observation_frame_map(requested_times,frame_times):
+    """Original legacy observer mapping: nearest emitted time, earlier-index tie."""
+    requested=np.asarray(requested_times,float);frames=np.asarray(frame_times,float)
+    if requested.ndim!=1 or frames.ndim!=1 or not len(frames) or not np.isfinite(requested).all() or not np.isfinite(frames).all() or np.any(np.diff(frames)<=0):raise ValueError('Invalid observation/frame time arrays')
+    lookup=np.argmin(abs(frames[:,None]-requested[None,:]),axis=0)
+    if np.any(abs(frames[lookup]-requested)>.500001):raise ValueError('Raw observation has no legacy-matched canonical frame')
+    return lookup
+
+
+def sampling_plan(requested_times,mechanics_minutes=.5):
+    """Freeze the existing exporter schedule separately from observation indices.
+
+    Export remains unique(ceil(raw/mechanics)*mechanics), exactly as before.
+    Observations use the original nearest-emitted-frame/earlier-tie rule. The
+    ceil-bin inverse is retained separately so those two concepts cannot mix.
+    """
+    requested=np.asarray(requested_times,float);step=float(mechanics_minutes)
+    if requested.ndim!=1 or not len(requested) or not np.isfinite(requested).all() or requested.min()<0 or not math.isfinite(step) or step<=0:raise ValueError('Invalid native sampling plan')
+    frames,export_lookup=np.unique(np.ceil(requested/step)*step,return_inverse=True)
+    matching=observation_frame_map(requested,frames)
+    buffer=io.StringIO();np.savetxt(buffer,frames,fmt='%.8f')
+    return dict(version=1,mechanics_minutes=step,raw_requested_minutes=requested.tolist(),frame_times_minutes=frames.tolist(),raw_to_export_index=export_lookup.tolist(),raw_to_frame_index=matching.tolist(),sample_times_sha256=hashlib.sha256(buffer.getvalue().encode()).hexdigest(),export_rule='unique(ceil(raw/mechanics_minutes)*mechanics_minutes)',observation_rule='nearest emitted frame; earliest frame index on equal distance; unchanged 0.500001 minute tolerance')
+
+
+def validate_sampling_plan(directory,plan,frame_times):
+    if not np.array_equal(np.asarray(plan['frame_times_minutes'],float),np.asarray(frame_times,float)):raise ValueError('Consumer times differ from frozen canonical export schedule')
+    path=Path(directory)/'sample_times.txt'
+    if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest()!=plan['sample_times_sha256']:raise ValueError('Exported sample-time file differs from frozen canonical schedule')
+    # The plan is derivable solely from raw requests, without trusting supplied aliases.
+    if plan!=sampling_plan(plan['raw_requested_minutes'],plan['mechanics_minutes']):raise ValueError('Invalid raw-observation to canonical-frame mapping')
+
+
+def _observation_mapping_fields(raw_times,frame_times,actual_times,lookup):
+    if raw_times is None:return {}
+    raw=np.asarray(raw_times,float);lookup=np.asarray(lookup,int)
+    if raw.shape!=lookup.shape or not np.array_equal(observation_frame_map(raw,frame_times),lookup):raise ValueError('Observation lookup differs from frozen legacy nearest-frame map')
+    return dict(observation_requested_times_minutes=raw,observation_frame_indices=lookup,observation_frame_times_minutes=np.asarray(frame_times)[lookup],observation_actual_times_minutes=np.asarray(actual_times)[lookup])
+
 def write_initial_csv(frame,path):
     """Check the complete deterministic CSV bytes before creating its file."""
     path=Path(path);cfg=context(path.parent);data=frame.to_csv(index=False).encode()
@@ -110,12 +149,12 @@ def write_npz(path,**values):
 
 
 
-def map_observables(directory,indices,lookup):
+def map_observables(directory,indices,lookup,raw_observation_times=None):
     """Map a just-measured immutable stream to frozen observation rows."""
     directory=Path(directory);indices=np.asarray(indices,int);lookup=np.asarray(lookup,int)
     with np.load(directory/'stream_observables.npz',allow_pickle=False) as saved:
         available=saved['requested_time_support'];mask=available[lookup]
-        write_npz(directory/'observables.npz',indices=indices[mask],predicted=saved['predicted'][lookup[mask]],trajectory_predicted=saved['predicted'],times_minutes=saved['times_minutes'],actual_times_minutes=saved['actual_times_minutes'],requested_indices=indices,requested_time_support=available,frame_sha256=saved['frame_sha256'],stream_identity_sha256=saved['stream_identity_sha256'],protocol_version=saved['protocol_version'])
+        write_npz(directory/'observables.npz',indices=indices[mask],predicted=saved['predicted'][lookup[mask]],trajectory_predicted=saved['predicted'],times_minutes=saved['times_minutes'],actual_times_minutes=saved['actual_times_minutes'],requested_indices=indices,requested_time_support=available,frame_sha256=saved['frame_sha256'],stream_identity_sha256=saved['stream_identity_sha256'],protocol_version=saved['protocol_version'],**_observation_mapping_fields(raw_observation_times,saved['times_minutes'],saved['actual_times_minutes'],lookup))
     return int(mask.sum())
 
 
@@ -279,6 +318,7 @@ def execute(command,directory,times,measure_callback,timeout,*,compact_directory
     try:
         size,count=_usage(directory)
         if size>cfg['initial_bytes'] or count>cfg['initial_inodes']:raise RuntimeError('Native initial case exceeds reserved input bytes/inodes')
+        if 'sampling_plan' in metadata:validate_sampling_plan(directory,metadata['sampling_plan'],times)
         _json(compact/'stream_identity.json',dict(protocol=PROTOCOL,protocol_version=1,times_minutes=times.tolist(),provenance=metadata,input_artifact_sha256={path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in directory.iterdir() if path.is_file()}),cfg['compact_bytes'])
         identity_sha256=hashlib.sha256((compact/'stream_identity.json').read_bytes()).hexdigest()
         result['stream_identity_sha256']=identity_sha256
@@ -299,7 +339,9 @@ def execute(command,directory,times,measure_callback,timeout,*,compact_directory
             ready=directory/'stream.frame.ready'
             if ready.exists():
                 frame=read_frame(ready);index=frame['index']
-                if not handshake or index!=last_index+1 or index>=len(times) or abs(frame['actual_minutes']-times[index])>.500001:raise ValueError('Native compact frame identity/order/time mismatch')
+                if not handshake or index!=last_index+1 or index>=len(times) or abs(frame['actual_minutes']-times[index])>.500001:
+                    result['rejected_frame']=dict(frame_index=index,actual_minutes=frame['actual_minutes'],expected_next_index=last_index+1,expected_minutes=float(times[index]) if 0<=index<len(times) else None,canonical_frame_count=len(times))
+                    raise ValueError('Native compact frame identity/order/time mismatch')
                 record=dict(requested_minutes=float(times[index]),actual_minutes=frame['actual_minutes'],status='state_only' if not measure else 'measurement_failed',frame_sha256=frame['frame_sha256'],frame_bytes=frame['frame_bytes'],cells=frame['cells'],wgd_events=frame['wgd_events'])
                 actual_times[index]=frame['actual_minutes'];frame_hashes[index]=frame['frame_sha256'].encode()
                 states.append(_frame_state(frame));_trajectory(directory,compact/'state_trajectory.csv',cfg['trajectory_bytes'])
@@ -383,6 +425,9 @@ def load_compact_evidence(directory,expected,times):
     required=['run_id','input_manifest_sha256','candidate_id','source_checkpoint_sha256','stage','replicate']
     provenance=identity.get('provenance',{})
     if any(key not in expected or key not in provenance or provenance[key]!=expected[key] for key in required):raise ValueError('Compact recovery source/run/candidate identity mismatch')
+    if 'sampling_plan' in expected:
+        plan=expected['sampling_plan']
+        if provenance.get('sampling_plan')!=plan or plan!=sampling_plan(plan['raw_requested_minutes'],plan['mechanics_minutes']) or identity.get('input_artifact_sha256',{}).get('sample_times.txt')!=plan['sample_times_sha256']:raise ValueError('Compact recovery canonical schedule/raw mapping mismatch')
     times=np.asarray(times,float)
     if not np.array_equal(np.asarray(identity.get('times_minutes'),float),times):raise ValueError('Compact recovery frozen requested times mismatch')
     path=directory/'stream_observables.npz'
@@ -405,7 +450,7 @@ def load_compact_evidence(directory,expected,times):
         return dict(times_minutes=times,actual_times_minutes=actual,predicted=prediction,requested_time_support=mask,frame_sha256=hashes,stream_identity_sha256=np.array(str(saved['stream_identity_sha256'])),protocol_version=np.array(1),source_npz_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),source_npz_name=path.name)
 
 
-def recover_mapped_case(directory,expected,times,indices,lookup,outcome):
+def recover_mapped_case(directory,expected,times,indices,lookup,outcome,raw_observation_times=None):
     """Promote already measured compact rows after a missing wrapper finish.
 
     Complete/partial outcomes are immutable. Recovered outcomes remain labelled
@@ -418,13 +463,15 @@ def recover_mapped_case(directory,expected,times,indices,lookup,outcome):
     if saved is None:return None
     indices=np.asarray(indices,int);lookup=np.asarray(lookup,int)
     if indices.shape!=lookup.shape or np.any(lookup<0) or np.any(lookup>=len(times)) or len(np.unique(indices))!=len(indices):raise ValueError('Invalid frozen compact recovery observation map')
+    mapping_fields=_observation_mapping_fields(raw_observation_times,saved['times_minutes'],saved['actual_times_minutes'],lookup)
     supported=saved['requested_time_support'][lookup];selected=indices[supported];prediction=saved['predicted'][lookup[supported]]
     mapped=directory/'observables.npz'
     if mapped.exists():
         with np.load(mapped,allow_pickle=False) as values:
             if not np.array_equal(values['indices'],selected) or not np.array_equal(values['predicted'],prediction,equal_nan=True):raise ValueError('Existing mapped compact evidence differs from frozen stream')
+            if any(key not in values or not np.array_equal(values[key],value,equal_nan=True) for key,value in mapping_fields.items()):raise ValueError('Existing mapped compact observation/frame mapping differs from frozen stream')
     else:
-        write_npz(mapped,indices=selected,predicted=prediction,trajectory_predicted=saved['predicted'],times_minutes=saved['times_minutes'],actual_times_minutes=saved['actual_times_minutes'],requested_indices=indices,requested_time_support=saved['requested_time_support'],frame_sha256=saved['frame_sha256'],stream_identity_sha256=saved['stream_identity_sha256'],protocol_version=saved['protocol_version'])
+        write_npz(mapped,indices=selected,predicted=prediction,trajectory_predicted=saved['predicted'],times_minutes=saved['times_minutes'],actual_times_minutes=saved['actual_times_minutes'],requested_indices=indices,requested_time_support=saved['requested_time_support'],frame_sha256=saved['frame_sha256'],stream_identity_sha256=saved['stream_identity_sha256'],protocol_version=saved['protocol_version'],**mapping_fields)
     result=dict(outcome,status='partial' if saved['requested_time_support'].any() else 'failed',engine_status='interrupted_recovered',recovered_from_compact_stream=True,recovery_model_calls=0,source_stream_npz_sha256=saved['source_npz_sha256'],source_stream_npz_name=saved['source_npz_name'],stream_identity_sha256=str(saved['stream_identity_sha256']),requested_observations=len(indices),measured_observations=int(supported.sum()),requested_snapshots=len(times),measured_snapshots=int(saved['requested_time_support'].sum()),error='Wrapper completion unavailable; exact saved compact measurements recovered without engine/model calls')
     if previous is not None:result['prior_outcome_sha256']=hashlib.sha256(outcome_path.read_bytes()).hexdigest()
     write_json(outcome_path,result);finalize_compact_case(directory);return result

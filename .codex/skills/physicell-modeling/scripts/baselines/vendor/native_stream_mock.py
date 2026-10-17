@@ -22,7 +22,8 @@ if len(sys.argv)>1 and sys.argv[1]=='--cloneid-frame-protocol':
 root=Path.cwd();mode=sys.argv[1] if len(sys.argv)>1 else 'normal'
 (root/'stream.protocol').write_text('CLONEID_NATIVE_FRAME_PROTOCOL 1 200000 5 8000064\n')
 state=(root/'state_trajectory.csv').open('w');state.write('time_minutes,n_low,n_high,n_dead_low,n_dead_high,wgd_events\n');state.flush()
-for i,t in enumerate([0.,30.,60.]):
+times=[float(line) for line in (root/'sample_times.txt').read_text().splitlines()] if (root/'sample_times.txt').exists() else [0.,30.,60.]
+for i,t in enumerate(times):
  cells=[[20.,20.,1000.,0.,0.],[40.,30.,1200.,0.,1.],[60.,50.,900.,1.,0.]]
  raw=struct.pack('<8sIIQdQQQQ',b'CLIDFRM1',1,5,i,t,len(cells),len(cells)*40,0,0)+b''.join(struct.pack('<5d',*row) for row in cells)
  if mode=='oversized' and i==0:raw=struct.pack('<8sIIQdQQQQ',b'CLIDFRM1',1,5,i,t,200001,200001*40,0,0)
@@ -151,7 +152,7 @@ class CompactRecoveryChecks(unittest.TestCase):
   def dump(path,value):path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(value))
   model=self.root/'lineage';candidate=dict(id='c',stage='shared',alpha=0.);folder=model/'candidates/c';self.case=folder/'simulations/000';self.case.mkdir(parents=True)
   dump(self.root/'run_identity.json',dict(run_id='new'));dump(self.root/'input_manifest.json',dict(files={}));dump(model/'shared_candidates.json',[candidate]);dump(folder/'final.json',dict(x=[0.]*15,loss=1.));dump(folder/'slots.json',[dict(replicate=0,times_days=[0.,30/1440],indices=[3,9],lookup=[0,1])])
-  self.expected=stream.run_expectation(self.root,'c',hashlib.sha256((folder/'final.json').read_bytes()).hexdigest(),'shared',0);self.identity['provenance']=self.expected;self.create()
+  self.expected=stream.run_expectation(self.root,'c',hashlib.sha256((folder/'final.json').read_bytes()).hexdigest(),'shared',0);self.expected['sampling_plan']=stream.sampling_plan([0.,30.]);self.identity['provenance']=self.expected;self.identity['input_artifact_sha256']={'sample_times.txt':self.expected['sampling_plan']['sample_times_sha256']};self.create()
   with patch.object(lineage,'ROOT',model),patch.object(lineage,'evaluate',side_effect=AssertionError('No science evaluation')),patch.object(lineage,'Data',side_effect=AssertionError('No dataset model construction')):result=lineage.recover_lineage_case('shared',0,0)
   self.assertEqual(result['measured_observations'],1);self.assertEqual(result['source_stream_npz_name'],'stream_observables.npz')
  def test_perspective_recovery_uses_frozen_parameters_and_rows(self):
@@ -160,7 +161,7 @@ class CompactRecoveryChecks(unittest.TestCase):
   def dump(path,value):path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(value))
   model=self.root/'perspective';out=model/'screen';self.case=out/'cases/c/00000';self.case.mkdir(parents=True);frozen=out/'frozen/c/final.json';dump(frozen,dict(x=[0.]*33))
   digest=hashlib.sha256(frozen.read_bytes()).hexdigest();dump(out/'parameter_manifest.json',dict(c=digest));dump(out/'slots.json',[dict(candidate_id='c',case_index=0,replicate=0,times_days=[0.,30/1440],observation_rows=[0,1],kind='main')]);dump(self.root/'run_identity.json',dict(run_id='new'));dump(self.root/'input_manifest.json',dict(files={}))
-  self.expected=stream.run_expectation(self.root,'c',digest,'screen',0);self.identity['provenance']=self.expected;self.create();rows=pd.DataFrame(dict(time_days=[0.,30/1440]))
+  self.expected=stream.run_expectation(self.root,'c',digest,'screen',0);self.expected['sampling_plan']=stream.sampling_plan([0.,30.]);self.identity['provenance']=self.expected;self.identity['input_artifact_sha256']={'sample_times.txt':self.expected['sampling_plan']['sample_times_sha256']};self.create();rows=pd.DataFrame(dict(time_days=[0.,30/1440]))
   with patch.object(diagnostics,'ROOT',model),patch.object(diagnostics.a,'evaluate',side_effect=AssertionError('No approximation evaluation')),patch.object(diagnostics.a,'Data',side_effect=AssertionError('No model construction')):result=diagnostics.recover_perspective_case('screen',0,rows)
   self.assertEqual(result['checkpoint_sha256'],digest);self.assertEqual(result['measured_observations'],1);self.assertEqual(result['status'],'partial')
  def test_aggregate_and_per_file_admission_happen_before_write(self):

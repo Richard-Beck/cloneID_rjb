@@ -94,16 +94,18 @@ def simulate(stage,index,slot_index):
  try:
   frozen=read(d/'final.json');slot=read(d/'slots.json')[slot_index];xx=vectors(frozen['x'])[slot['group_index']];shape=[1100,1400];scale=np.sqrt(1.5);domain=[shape[1]*scale,shape[0]*scale];crop=[-shape[1]/2,-shape[0]/2];times=np.array(slot['times_days'])*1440
   case=native_stream.case_directory(sd);meta=transfer.export_case(case,np.exp(xx[:8]),rate(xx,slot['oxygen']),slot['seed'],times,domain,death_per_day=float(np.exp(xx[12])),dead_duration_hours=float(np.exp(xx[13])),initial_dead_fraction=float(np.exp(xx[14])))
+  sample_plan=meta['sampling_plan'];frame_times=np.asarray(sample_plan['frame_times_minutes'],float)
+  raw_lookup=np.asarray(slot['lookup'],int);lookup=np.asarray(sample_plan['raw_to_frame_index'],int)[raw_lookup]
   figure_requests={}
   if slot['replicate']==0:
-   for row,lookup_index in zip(slot['indices'],slot['lookup']):
+   for row,lookup_index in zip(slot['indices'],lookup):
     if int(row) in set(native_stream.context(case).get('figure_rows',[175,57,342,234])):figure_requests.setdefault(int(lookup_index),[]).append(int(row))
-  streamed=native_stream.execute([str(ENGINE),'PhysiCell_settings.xml'],case,times,lambda frame:transfer.snapshot_arrays(frame['x'],frame['y'],frame['total_volume'],frame['dead'],domain,shape,crop),TIMEOUT,compact_directory=sd,provenance=dict(candidate_id=c['id'],stage=stage,replicate=int(slot['replicate']),seed=int(slot['seed']),slot_index=slot_index,case_spec=dict(natural_state8=np.exp(xx[:8]).tolist(),rate_per_day=rate(xx,slot['oxygen']),oxygen=slot['oxygen'],seed=int(slot['seed']),times_minutes=times.tolist(),domain_size=domain,field_shape=shape,crop_origin=crop,death_per_day=float(np.exp(xx[12])),dead_duration_hours=float(np.exp(xx[13])),initial_dead_fraction=float(np.exp(xx[14])),mechanics_minutes=.5,phenotype_minutes=3.,post_g1_minutes=780.),source_checkpoint_sha256=support.file_sha(d/'final.json')),figure_requests=figure_requests,figure_geometry=(domain,shape,crop))
+  streamed=native_stream.execute([str(ENGINE),'PhysiCell_settings.xml'],case,frame_times,lambda frame:transfer.snapshot_arrays(frame['x'],frame['y'],frame['total_volume'],frame['dead'],domain,shape,crop),TIMEOUT,compact_directory=sd,provenance=dict(candidate_id=c['id'],stage=stage,sampling_plan=sample_plan,replicate=int(slot['replicate']),seed=int(slot['seed']),slot_index=slot_index,case_spec=dict(natural_state8=np.exp(xx[:8]).tolist(),rate_per_day=rate(xx,slot['oxygen']),oxygen=slot['oxygen'],seed=int(slot['seed']),times_minutes=times.tolist(),domain_size=domain,field_shape=shape,crop_origin=crop,death_per_day=float(np.exp(xx[12])),dead_duration_hours=float(np.exp(xx[13])),initial_dead_fraction=float(np.exp(xx[14])),mechanics_minutes=.5,phenotype_minutes=3.,post_g1_minutes=780.),source_checkpoint_sha256=support.file_sha(d/'final.json')),figure_requests=figure_requests,figure_geometry=(domain,shape,crop))
   arr=streamed.pop('predicted');available=streamed.pop('requested_time_support');result.update(streamed);result['stream_status']=result.pop('status')
-  lookup=np.asarray(slot['lookup'],int);row_available=available[lookup];indices=np.asarray(slot['indices'],int)
-  native_stream.map_observables(sd,indices,lookup)
+  row_available=available[lookup];indices=np.asarray(slot['indices'],int)
+  native_stream.map_observables(sd,indices,lookup,raw_observation_times=times[raw_lookup])
   complete=bool(available.all()) and bool(np.isfinite(arr).all()) and result['engine_status']=='complete'
-  result.update(status='complete' if complete else 'partial' if available.any() else 'failed',slot=slot,initialization=meta,requested_snapshots=len(times),measured_snapshots=int(available.sum()),domain_size=domain,field_shape=shape,crop_origin=crop)
+  result.update(status='complete' if complete else 'partial' if available.any() else 'failed',slot=slot,initialization=meta,requested_snapshots=len(frame_times),raw_requested_times=len(times),measured_snapshots=int(available.sum()),domain_size=domain,field_shape=shape,crop_origin=crop)
 
  except Exception as error:result.update(status='failed',error=repr(error),traceback=traceback.format_exc())
  finally:
@@ -126,7 +128,9 @@ def _recover_lineage_candidate(c,slot_index):
     if not (directory/'stream_identity.json').exists():return None
     final=folder/'final.json';slots=read(folder/'slots.json');slot=slots[slot_index]
     expected=native_stream.run_expectation(ROOT.parent,c['id'],support.file_sha(final),c['stage'],slot['replicate'])
-    return native_stream.recover_mapped_case(directory,expected,np.asarray(slot['times_days'])*1440,slot['indices'],slot['lookup'],dict(candidate_id=c['id'],stage=c['stage'],slot_index=slot_index,slot=slot))
+    raw_times=np.asarray(slot['times_days'])*1440;plan=native_stream.sampling_plan(raw_times);expected['sampling_plan']=plan
+    raw_lookup=np.asarray(slot['lookup'],int);lookup=np.asarray(plan['raw_to_frame_index'],int)[raw_lookup]
+    return native_stream.recover_mapped_case(directory,expected,plan['frame_times_minutes'],slot['indices'],lookup,dict(candidate_id=c['id'],stage=c['stage'],slot_index=slot_index,slot=slot),raw_observation_times=raw_times[raw_lookup])
 
 def _score_evidence(c):
  d=ROOT/'candidates'/c['id'];files={}

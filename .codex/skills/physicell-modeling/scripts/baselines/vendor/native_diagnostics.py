@@ -63,7 +63,7 @@ def run(stage,index):
   if s['replicate']==0 and s['kind']=='main':
    for row in s['observation_rows']:
     if int(row) in set(native_stream.context(native_stream.case_directory(folder)).get('figure_rows',[175,57,342,234])):
-     target=float(a.Data().rows.iloc[int(row)].time_days)*1440;sample=int(np.argmin(abs(np.asarray(sp['times_days'])*1440-target)));figure_requests.setdefault(sample,[]).append(int(row))
+     target=float(a.Data().rows.iloc[int(row)].time_days)*1440;frames=native_stream.sampling_plan(np.asarray(sp['times_days'])*1440,sp.get('mechanics_minutes',.5))['frame_times_minutes'];sample=int(native_stream.observation_frame_map([target],frames)[0]);figure_requests.setdefault(sample,[]).append(int(row))
   nativeout=native.execute(native_stream.case_directory(folder),sp,timeout_seconds=min(TIMEOUT,remaining),measure=s['kind']=='main',compact_directory=folder,provenance=dict(candidate_id=s['candidate_id'],stage=stage,replicate=int(s['replicate']),seed=int(s['seed']),case_index=int(index),source_checkpoint_sha256=checkpoint_hash),figure_requests=figure_requests);result['native']=nativeout
   if nativeout.get('error'):result['error']=nativeout['error']
   trajectory=None
@@ -78,8 +78,8 @@ def run(stage,index):
   if s['kind']=='main' and (folder/'stream_observables.npz').exists():
    with np.load(folder/'stream_observables.npz') as z:
     rows=a.Data().rows.iloc[s['observation_rows']];requested=rows.time_days.to_numpy()*1440;times=z['times_minutes'];values=z['predicted'];available=z['requested_time_support'] if 'requested_time_support' in z else np.isfinite(values).all(axis=1)
-    lookup=np.argmin(abs(times[:,None]-requested[None,:]),axis=0);matched=(abs(times[lookup]-requested)<.500001)&available[lookup]
-    native_stream.map_observables(folder,s['observation_rows'],lookup)
+    lookup=native_stream.observation_frame_map(requested,times);matched=(abs(times[lookup]-requested)<.500001)&available[lookup]
+    native_stream.map_observables(folder,s['observation_rows'],lookup,raw_observation_times=requested)
     result.update(requested_observations=len(requested),measured_observations=int(matched.sum()))
   result['status']='complete' if nativeout['status']=='success' else 'partial' if result.get('measured_observations',0)>0 or trajectory is not None else 'failed'
  except Exception as error:result.update(error=repr(error),traceback=traceback.format_exc())
@@ -97,12 +97,12 @@ def recover_perspective_case(stage,index,rows=None):
     frozen=out/'frozen'/slot['candidate_id']/'final.json';digest=sha(frozen)
     if read(out/'parameter_manifest.json')[slot['candidate_id']]!=digest:raise ValueError('Recovered native frozen parameter hash mismatch')
     expected=native_stream.run_expectation(ROOT.parent,slot['candidate_id'],digest,stage,slot['replicate'])
-    times=np.unique(np.ceil(np.asarray(slot['times_days'])*1440/.5)*.5)
+    plan=native_stream.sampling_plan(np.asarray(slot['times_days'])*1440);expected['sampling_plan']=plan;times=np.asarray(plan['frame_times_minutes'],float)
     if rows is None:rows=pd.read_csv(ROOT/'inputs/observations.csv')
     target=rows.iloc[slot['observation_rows']].time_days.to_numpy(float)*1440
-    lookup=np.argmin(abs(times[:,None]-target[None,:]),axis=0) if len(target) else np.array([],int)
+    lookup=native_stream.observation_frame_map(target,times)
     if len(target) and np.any(abs(times[lookup]-target)>.500001):raise ValueError('Frozen native observation times do not match requested samples')
-    return native_stream.recover_mapped_case(directory,expected,times,slot['observation_rows'],lookup,dict(slot=slot,checkpoint_sha256=digest))
+    return native_stream.recover_mapped_case(directory,expected,times,slot['observation_rows'],lookup,dict(slot=slot,checkpoint_sha256=digest),raw_observation_times=target)
 
 def response(data,nat,o,f,horizon):
  f=float(np.clip(f,EPS,1-EPS));dt=data.dt[o];stop=np.ceil(horizon/dt)*dt;dl=nat['dmax']*float(np.clip(1-o/20.5,0,1))

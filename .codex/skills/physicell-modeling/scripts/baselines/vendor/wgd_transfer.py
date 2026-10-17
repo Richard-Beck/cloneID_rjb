@@ -112,7 +112,8 @@ def export_case(directory,spec,initial_override=None):
     width,height=spec["domain_size"]
     low=np.asarray(spec["p_low"],float);high=np.asarray(spec["p_high"],float)
     mechanics=spec.get("mechanics_minutes",.5);phenotype=spec.get("phenotype_minutes",3.)
-    times=np.unique(np.ceil(np.asarray(spec["times_days"],float)*1440/mechanics)*mechanics)
+    sample_plan=native_stream.sampling_plan(np.asarray(spec["times_days"],float)*1440,mechanics)
+    times=np.asarray(sample_plan["frame_times_minutes"],float)
     if not len(times) or times.min()<0:raise ValueError("Invalid sampling times")
     cells,metadata=initial_state(low,high,spec["initial_density"],spec["initial_high_fraction"],spec["cluster_size"],
                                  spec["seed"],spec["domain_size"],spec.get("post_g1_minutes",780),
@@ -157,6 +158,7 @@ def export_case(directory,spec,initial_override=None):
     tree.write(directory/"PhysiCell_settings.xml",encoding="utf-8",xml_declaration=True)
     (directory/"cell_rules.csv").write_text(f"default,pressure,decreases,cycle entry,0,{low[2]:.17g},2,0\nwgd_high,pressure,decreases,cycle entry,0,{high[2]:.17g},2,0\n")
     atomic_json(directory/"case_spec.json",spec)
+    metadata["sampling_plan"]=sample_plan
     return metadata,times
 
 
@@ -187,7 +189,7 @@ def execute(directory,spec,timeout_seconds=600,initial_override=None,pair_check=
     try:
         if pair_check:raise ValueError('Pair-check is outside compact acquisition protocol; use an explicitly separate bounded adapter')
         metadata,times=export_case(directory,spec,initial_override)
-        provenance=dict(provenance or {},case_spec=spec,seed=int(spec['seed']))
+        provenance=dict(provenance or {},case_spec=spec,sampling_plan=metadata['sampling_plan'],seed=int(spec['seed']))
         streamed=native_stream.execute([str(ENGINE),'PhysiCell_settings.xml'],directory,times,lambda frame:support_snapshot(frame,spec),timeout_seconds,compact_directory=compact,measure=measure,provenance=provenance,figure_requests=figure_requests,figure_geometry=(spec['domain_size'],spec['field_shape'],spec['crop_origin']))
         values=streamed.pop('predicted');available=streamed.pop('requested_time_support');outcome.update(streamed,initial=metadata,sample_times_minutes=times.tolist())
         trajectory=None
